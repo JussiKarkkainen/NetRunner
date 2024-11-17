@@ -22,7 +22,9 @@ common warnings
 executable Explorer
   main-is:             Main.hs
   other-modules:       WebServer.WebServer,
-                       TaskHandler.TaskHandler
+                       TaskHandler.TaskHandler,
+                       Database.Database
+
   -- other-extensions:
   build-depends:       base >=4.13 && <4.14,
                        scotty,
@@ -33,7 +35,8 @@ executable Explorer
                        uuid,
                        process,
                        async,
-                       time
+                       time,
+                       sqlite-simple
 
   hs-source-dirs:      app
 

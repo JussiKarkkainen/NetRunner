@@ -7,7 +7,7 @@ module TaskHandler.TaskHandler
   , stopTaskHandler
   , instructionInputHandler
   , pollWorkspaceUpdateHandler
-  , TaskData
+  , TaskData(..)
   ) where
 
 import GHC.Generics (Generic)
@@ -20,7 +20,8 @@ type WorkspaceUpdate = String -- Replace with actual type
 type TaskId = String          -- Replace with actual type
 
 data TaskData = TaskData
-  { taskName  :: String
+  { id        :: String
+  , taskName  :: String
   , modelType :: String
   } deriving (Show, Generic)
 
@@ -44,4 +45,6 @@ instructionInputHandler _ = return $ Just "Instruction Processed" -- Stub
 
 pollWorkspaceUpdateHandler :: TaskId -> IO (Maybe WorkspaceUpdate)
 pollWorkspaceUpdateHandler _ = return $ Just "Workspace Update" -- Stub
+
+
 
