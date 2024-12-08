@@ -2,9 +2,11 @@
 {-# LANGUAGE DeriveGeneric #-}
 
 module Database.Database
-  ( addTask
-  , getAllTasks
-  , getTaskById
+  ( addTaskDB
+  , getAllTasksDB
+  , getTaskByIdDB
+  , updateTaskStatusDB
+  , deleteTaskDB
   , initializeDatabase
   , Task(..)
   , TaskStatus(..)
@@ -18,27 +20,23 @@ import Data.Time (UTCTime, getCurrentTime)
 import Data.Aeson (FromJSON, ToJSON)
 import GHC.Generics (Generic)
 
-data TaskStatus = Running | Paused | Finished | Pending | Undefined deriving (Show, Eq, Generic)
+data TaskStatus = Running | Stopped | Finished | Pending | Undefined deriving (Show, Eq, Generic)
 
 instance ToJSON TaskStatus
 instance FromJSON TaskStatus
 
 stringToStatus :: String -> TaskStatus
 stringToStatus "running" = Running
-stringToStatus "paused" = Paused
-stringToStatus "finished" = Finished
+stringToStatus "stopped" = Stopped
 stringToStatus "pending" = Pending
-stringToStatus "undefined" = Undefined
 
 instance FromField TaskStatus where
   fromField fieldData = do
     value <- fromField fieldData :: Ok String
     case value of 
       "running" -> Ok Running
-      "paused" -> Ok Paused
-      "finished" -> Ok Finished
+      "stopped" -> Ok Stopped
       "pending" -> Ok Pending
-      "undefined" -> Ok Undefined
       _ -> returnError ConversionFailed fieldData ("Invalid Status: " ++ value)
 
 data Task = Task 
@@ -65,25 +63,40 @@ initializeDatabase conn = do
     \created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
   putStrLn "Database initialized."
 
-addTask :: Connection -> String -> String -> IO String
-addTask conn name modelType = do
+instance FromRow Task where
+  fromRow = Task <$> field <*> field <*> field <*> field <*> field <*> field
+
+addTaskDB :: Connection -> String -> String -> IO String
+addTaskDB conn name modelType = do
   currentTime <- getCurrentTime
   execute conn
     "INSERT INTO tasks (name, model_type, created_at) VALUES (?,?,?)"
     (name, modelType, currentTime)
   return name
 
-instance FromRow Task where
-  fromRow = Task <$> field <*> field <*> field <*> field <*> field <*> field
+deleteTaskDB :: Connection -> String -> IO String
+deleteTaskDB conn iden = do
+  execute conn "DELETE FROM tasks WHERE id = ?" (Only iden)
+  return $ "Deleted: " ++ iden
 
-getAllTasks :: Connection -> IO [Task]
-getAllTasks conn = do
+updateTaskStatusDB :: Connection -> String -> IO (Maybe String)
+updateTaskStatusDB conn iden = do
+  curStatus <- queryNamed conn "SELECT status from tasks WHERE id = :id" [":id" := iden] :: IO [Only String]
+  case curStatus of
+    [Only stat] -> do
+      let newStatus = if stat == "pending" || stat == "stopped" then "running" else "stopped" 
+      execute conn "UPDATE tasks SET status = ? WHERE id = ?" (newStatus, iden) 
+      return $ Just newStatus
+    _     -> return Nothing
+
+getAllTasksDB :: Connection -> IO [Task]
+getAllTasksDB conn = do
   tasks <- query_ conn "SELECT id, name, model_type, status, system_prompt, created_at FROM tasks" :: IO [Task]
   return tasks
 
-getTaskById :: Connection -> String -> IO (Maybe Task)
-getTaskById conn id = do
-  task <- queryNamed conn "SELECT * FROM tasks WHERE id = :id" [":id" := id]
+getTaskByIdDB :: Connection -> String -> IO (Maybe Task)
+getTaskByIdDB conn iden = do
+  task <- queryNamed conn "SELECT * FROM tasks WHERE id = :id" [":id" := iden]
   return $ case task of
     [task] -> Just task
     _      -> Nothing

@@ -11,7 +11,7 @@ import qualified Data.Text.Lazy.IO as TL
 import Data.Aeson (object, (.=), FromJSON, ToJSON)
 import Control.Monad.IO.Class (liftIO)
 import Network.HTTP.Types.Status (notFound404, internalServerError500)
-import TaskHandler.TaskHandler (newTaskHandler, deleteTaskHandler , startTaskHandler, stopTaskHandler,
+import TaskHandler.TaskHandler (newTaskHandler, deleteTaskHandler , updateTaskStatusHandler,
                                 instructionInputHandler, pollTaskHistoryHandler, pollWorkspaceUpdateHandler, TaskData)
 
 runServer :: Int -> IO ()
@@ -19,8 +19,7 @@ runServer port = scotty port $ do
   get "/" mainPage
   post "/new_task" newTask
   post "/delete_task" deleteTask
-  post "/start_task" startTask
-  post "/stop_task" stopTask
+  post "/update_task_status" updateTaskStatus
   post "/instruction_input" instructionInput
   post "/poll_workspace_update" pollWorkspaceUpdate
   get "/poll_task_history" pollTaskHistory
@@ -34,37 +33,11 @@ mainPage = do
 newTask :: ActionM ()
 newTask = do
   taskData <- jsonData 
-  name <- liftIO $ newTaskHandler taskData
-  json name
-
-deleteTask :: ActionM ()
-deleteTask = do
-  taskData <- jsonData
-  maybeResponse <- liftIO $ deleteTaskHandler taskData
+  maybeResponse <- liftIO $ newTaskHandler taskData
   case maybeResponse of 
     Nothing -> do
       status internalServerError500
-      json $ object ["error" .= ("Failed to delete task" :: String)]
-    Just response -> json response
-
-startTask :: ActionM ()
-startTask = do
-  taskData <- jsonData
-  maybeResponse <- liftIO $ startTaskHandler taskData
-  case maybeResponse of
-    Nothing -> do
-      status internalServerError500
-      json $ object ["error" .= ("Failed to start task" :: String)]
-    Just response -> json response
-
-stopTask :: ActionM ()
-stopTask = do
-  taskData <- jsonData
-  maybeResponse <- liftIO $ stopTaskHandler taskData
-  case maybeResponse of
-    Nothing -> do
-      status internalServerError500
-      json $ object ["error" .= ("Failed to stop task" :: String)]
+      json $ object ["error" .= ("Failed to create task" :: String)]
     Just response -> json response
 
 instructionInput :: ActionM ()
@@ -89,6 +62,28 @@ pollTaskHistory = do
 data TaskId = TaskId { idtask :: String } deriving (Show, Generic)
 instance FromJSON TaskId
 instance ToJSON TaskId
+
+updateTaskStatus :: ActionM ()
+updateTaskStatus = do
+  taskId <- jsonData :: ActionM TaskId
+  let taskIdValue = idtask taskId
+  maybeResponse <- liftIO $ updateTaskStatusHandler taskIdValue
+  case maybeResponse of
+    Nothing -> do
+      status internalServerError500
+      json $ object ["error" .= ("Failed to start task" :: String)]
+    Just response -> json response
+
+deleteTask :: ActionM ()
+deleteTask = do
+  taskId <- jsonData :: ActionM TaskId
+  let taskIdValue = idtask taskId
+  maybeResponse <- liftIO $ deleteTaskHandler taskIdValue
+  case maybeResponse of 
+    Nothing -> do
+      status internalServerError500
+      json $ object ["error" .= ("Failed to delete task" :: String)]
+    Just response -> json response
 
 pollWorkspaceUpdate :: ActionM ()
 pollWorkspaceUpdate = do

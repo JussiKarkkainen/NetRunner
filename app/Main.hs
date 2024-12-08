@@ -13,8 +13,8 @@ main = do
   initializeDatabase conn
   case debug of
     True -> do
-      addTask conn "debugtaskname3" "debug-claude"
-      tasks <- getAllTasks conn
+      addTaskDB conn "debugtaskname3" "debug-claude"
+      tasks <- getAllTasksDB conn
       mapM_ print tasks
       close conn
     False -> do

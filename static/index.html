@@ -128,7 +128,7 @@
         function closeNewTaskModal() {
             document.getElementById('newTaskModal').classList.remove('active');
         }
-        
+
        	async function loadTaskHistory() {
             try {
                 const response = await fetch('/poll_task_history');
@@ -145,7 +145,7 @@
                             <span class="task-name">${task.taskTitle}</span>
                             <button class="select-button" onclick="selectTask(${task.taskId})">Select</button>
                         </div>
-                        <div class="delete-button" onclick="deleteTask('${task.taskTitle}')">
+                        <div class="delete-button" onclick="deleteTask('${task.taskId}')">
                             Delete
                         </div>
                     `;
@@ -156,6 +156,30 @@
             }
         } 
 
+        async function updateTaskStatus() {
+            const statusBadge = document.getElementById('statusBadge');
+            const taskId = statusBadge.getAttribute('data-task-id');
+
+            if (!taskId) {
+                alert("No task selected!");
+                return;
+            }
+
+            try {
+                const response = await fetch('/update_task_status', {
+                    method: 'post',
+                    headers: {
+                        'content-type': 'application/json'
+                    },
+                    body: JSON.stringify({idtask: taskId})
+                });
+                const newStatus = await response.json();
+                statusBadge.textContent = newStatus;
+            } catch (error) {
+                console.error('error updating task status: ', error);
+            }
+        }
+                
 				async function selectTask(taskId) {
 
             try {
@@ -173,8 +197,9 @@
                 document.getElementById('selectedModel').textContent = task.taskModelType || 'None';
                 document.getElementById('currentTask').textContent = task.taskName;
                 const statusBadge = document.getElementById('statusBadge');
-                statusBadge.textContent = task.status || 'Idle';
+                statusBadge.textContent = task.taskStatus;
                 statusBadge.disabled = false;
+                statusBadge.setAttribute('data-task-id', taskId);
 
                 // Update workspace content
                 const workspaceContent = document.getElementById('workspaceContent');
@@ -199,38 +224,30 @@
             }
         }
 
-        // Function to delete a task
-        async function deleteTask(taskData) {
+        async function deleteTask(taskId) {
             try {
                 const response = await fetch('/delete_task', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify(taskData)
+                    body: JSON.stringify({idtask: taskId})
                 });
 
                 if (response.ok) {
-                    console.log('Task deleted:', taskData.taskName);
-                    removeTaskFromHistory(taskData.taskName);
+                    const taskHistoryElement = document.getElementById('taskHistory');
+                    const taskElements = Array.from(taskHistoryElement.children);
+                    taskElements.forEach((taskElement) => {
+                        const deleteButton = taskElement.querySelector('.delete-button');
+                        if (deleteButton && deleteButton.getAttribute('onclick') === `deleteTask('${taskId}')`) {
+                            taskElement.remove();
+                        }
+                    });
                 } else {
                     console.error('Failed to delete task');
                 }
             } catch (error) {
                 console.error('Error deleting task:', error);
-            }
-        }
-
-        // Function to remove a task from the task history
-        function removeTaskFromHistory(taskName) {
-            const taskHistoryElement = document.getElementById('taskHistory');
-            const taskItems = taskHistoryElement.getElementsByClassName('task-history-item');
-
-            for (let i = 0; i < taskItems.length; i++) {
-                if (taskItems[i].textContent.includes(taskName)) {
-                    taskHistoryElement.removeChild(taskItems[i]);
-                    break;
-                }
             }
         }
 
