@@ -1,8 +1,10 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE DeriveGeneric #-}
 
 module Database.Database
   ( addTask
   , getAllTasks
+  , getTaskById
   , initializeDatabase
   , Task(..)
   , TaskStatus(..)
@@ -13,8 +15,13 @@ import Database.SQLite.Simple.Ok
 import Database.SQLite.Simple.FromRow
 import Database.SQLite.Simple.FromField (FromField (fromField), returnError)
 import Data.Time (UTCTime, getCurrentTime)
+import Data.Aeson (FromJSON, ToJSON)
+import GHC.Generics (Generic)
 
-data TaskStatus = Running | Paused | Finished | Pending | Undefined deriving (Show, Eq)
+data TaskStatus = Running | Paused | Finished | Pending | Undefined deriving (Show, Eq, Generic)
+
+instance ToJSON TaskStatus
+instance FromJSON TaskStatus
 
 stringToStatus :: String -> TaskStatus
 stringToStatus "running" = Running
@@ -36,12 +43,15 @@ instance FromField TaskStatus where
 
 data Task = Task 
   { taskId          :: Int
-  , taskName        :: String
+  , taskTitle       :: String
   , taskModelType   :: String
   , taskStatus      :: TaskStatus
   , taskPrompt      :: String
   , taskCreatedAt   :: UTCTime
-  } deriving (Show)
+  } deriving (Show, Generic)
+
+instance FromJSON Task
+instance ToJSON Task
 
 initializeDatabase :: Connection -> IO ()
 initializeDatabase conn = do
@@ -55,13 +65,13 @@ initializeDatabase conn = do
     \created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
   putStrLn "Database initialized."
 
-addTask :: Connection -> String -> String -> IO ()
+addTask :: Connection -> String -> String -> IO String
 addTask conn name modelType = do
   currentTime <- getCurrentTime
   execute conn
     "INSERT INTO tasks (name, model_type, created_at) VALUES (?,?,?)"
     (name, modelType, currentTime)
-  putStrLn $ "Task added: " ++ name
+  return name
 
 instance FromRow Task where
   fromRow = Task <$> field <*> field <*> field <*> field <*> field <*> field
@@ -70,4 +80,11 @@ getAllTasks :: Connection -> IO [Task]
 getAllTasks conn = do
   tasks <- query_ conn "SELECT id, name, model_type, status, system_prompt, created_at FROM tasks" :: IO [Task]
   return tasks
+
+getTaskById :: Connection -> String -> IO (Maybe Task)
+getTaskById conn id = do
+  task <- queryNamed conn "SELECT * FROM tasks WHERE id = :id" [":id" := id]
+  return $ case task of
+    [task] -> Just task
+    _      -> Nothing
 

@@ -1,15 +1,18 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE DeriveGeneric #-}
 
 module WebServer.WebServer
   ( runServer
   ) where
 
 import Web.Scotty
+import GHC.Generics (Generic)
+import qualified Data.Text.Lazy.IO as TL
 import Data.Aeson (object, (.=), FromJSON, ToJSON)
 import Control.Monad.IO.Class (liftIO)
 import Network.HTTP.Types.Status (notFound404, internalServerError500)
 import TaskHandler.TaskHandler (newTaskHandler, deleteTaskHandler , startTaskHandler, stopTaskHandler,
-                                instructionInputHandler, pollWorkspaceUpdateHandler, TaskData)
+                                instructionInputHandler, pollTaskHistoryHandler, pollWorkspaceUpdateHandler, TaskData)
 
 runServer :: Int -> IO ()
 runServer port = scotty port $ do
@@ -19,7 +22,9 @@ runServer port = scotty port $ do
   post "/start_task" startTask
   post "/stop_task" stopTask
   post "/instruction_input" instructionInput
-  get "/poll_workspace_update" pollWorkspaceUpdate
+  post "/poll_workspace_update" pollWorkspaceUpdate
+  get "/poll_task_history" pollTaskHistory
+  get "/static/styles.css" fetchCSS
 
 mainPage :: ActionM ()
 mainPage = do
@@ -29,14 +34,8 @@ mainPage = do
 newTask :: ActionM ()
 newTask = do
   taskData <- jsonData 
-  maybeTask <- liftIO $ newTaskHandler taskData
-  case maybeTask of 
-    Nothing -> do
-      status internalServerError500
-      json $ object ["error" .= ("Failed to create task" :: String)]
-    Just task -> do
-      json task  
-
+  name <- liftIO $ newTaskHandler taskData
+  json name
 
 deleteTask :: ActionM ()
 deleteTask = do
@@ -47,7 +46,6 @@ deleteTask = do
       status internalServerError500
       json $ object ["error" .= ("Failed to delete task" :: String)]
     Just response -> json response
-
 
 startTask :: ActionM ()
 startTask = do
@@ -79,12 +77,33 @@ instructionInput = do
       json $ object ["error" .= ("Failed to process instruction input" :: String)]
     Just response -> json response
 
+pollTaskHistory :: ActionM ()
+pollTaskHistory = do
+  maybeHistory <- liftIO $ pollTaskHistoryHandler
+  case maybeHistory of
+    Nothing -> do
+      status internalServerError500
+      json $ object ["error" .= ("Failed to poll task history update" :: String)]
+    Just update -> json update
+
+data TaskId = TaskId { idtask :: String } deriving (Show, Generic)
+instance FromJSON TaskId
+instance ToJSON TaskId
+
 pollWorkspaceUpdate :: ActionM ()
 pollWorkspaceUpdate = do
-  taskId <- param "task_name"
-  maybeUpdate <- liftIO $ pollWorkspaceUpdateHandler taskId
-  case maybeUpdate of
+  taskId <- jsonData :: ActionM TaskId
+  let taskIdValue = idtask taskId
+  maybeTask <- liftIO $ pollWorkspaceUpdateHandler taskIdValue
+  case maybeTask of
     Nothing -> do
       status internalServerError500
       json $ object ["error" .= ("Failed to poll workspace update" :: String)]
-    Just update -> json update
+    Just task -> json task
+
+fetchCSS :: ActionM ()
+fetchCSS = do
+  css <- liftIO $ TL.readFile "static/styles.css"
+  setHeader "Content-Type" "text/css"
+  text css
+

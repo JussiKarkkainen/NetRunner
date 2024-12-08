@@ -6,30 +6,33 @@ module TaskHandler.TaskHandler
   , startTaskHandler
   , stopTaskHandler
   , instructionInputHandler
+  , pollTaskHistoryHandler
   , pollWorkspaceUpdateHandler
   , TaskData(..)
   ) where
 
 import GHC.Generics (Generic)
 import Data.Aeson (FromJSON, ToJSON)
+import Database.Database
+import Database.SQLite.Simple
 
-type Task = String     -- Replace with actual type
 type Response = String -- Replace with actual type
 type InstructionData = String -- Replace with actual type
-type WorkspaceUpdate = String -- Replace with actual type
-type TaskId = String          -- Replace with actual type
+type TaskHistory = String 
 
 data TaskData = TaskData
-  { id        :: String
-  , taskName  :: String
+  { taskName  :: String
   , modelType :: String
   } deriving (Show, Generic)
 
 instance FromJSON TaskData
 instance ToJSON TaskData
 
-newTaskHandler :: TaskData -> IO (Maybe Task)
-newTaskHandler _ = return $ Just "New Task Created" -- Stub
+newTaskHandler :: TaskData -> IO String
+newTaskHandler task = do
+  conn <- open "tasks.db"
+  name <- addTask conn (taskName task) (modelType task)
+  return $ "Created task: " ++ name
 
 deleteTaskHandler :: TaskData -> IO (Maybe Response)
 deleteTaskHandler _ = return $ Just "Task Deleted" -- Stub
@@ -43,8 +46,17 @@ stopTaskHandler _ = return $ Just "Task Stopped" -- Stub
 instructionInputHandler :: InstructionData -> IO (Maybe Response)
 instructionInputHandler _ = return $ Just "Instruction Processed" -- Stub
 
-pollWorkspaceUpdateHandler :: TaskId -> IO (Maybe WorkspaceUpdate)
-pollWorkspaceUpdateHandler _ = return $ Just "Workspace Update" -- Stub
+pollTaskHistoryHandler :: IO (Maybe [Task])
+pollTaskHistoryHandler = do
+  conn <- open "tasks.db"
+  tasks <- getAllTasks conn
+  close conn
+  return $ Just tasks
 
-
+pollWorkspaceUpdateHandler :: String -> IO (Maybe Task)
+pollWorkspaceUpdateHandler id = do
+  conn <- open "tasks.db"
+  task <- getTaskById conn id
+  close conn
+  return task
 

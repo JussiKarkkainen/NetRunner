@@ -5,8 +5,7 @@ import WebServer.WebServer (runServer)
 import TaskHandler.TaskHandler
 import Database.Database
 
-debug = True
-debugTask = TaskData "0" "debugtaskname" "debug-gpt"
+debug = False
 
 main :: IO ()
 main = do 
@@ -14,7 +13,7 @@ main = do
   initializeDatabase conn
   case debug of
     True -> do
-      addTask conn "debugtaskname2" "debug-claude"
+      addTask conn "debugtaskname3" "debug-claude"
       tasks <- getAllTasks conn
       mapM_ print tasks
       close conn
