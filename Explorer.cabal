@@ -23,7 +23,9 @@ executable Explorer
   main-is:             Main.hs
   other-modules:       WebServer.WebServer,
                        TaskHandler.TaskHandler,
-                       Database.Database
+                       Database.Database,
+                       AIClient.AIClient,
+                       ToolUse.ToolUse
 
   -- other-extensions:
   build-depends:       base >=4.13 && <4.14,

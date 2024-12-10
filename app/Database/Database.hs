@@ -132,12 +132,20 @@ getTaskByIdDB conn iden = do
     [task] -> Just task
     _      -> Nothing
 
-getTasksByStatusDB :: Connection -> String -> IO (Maybe [Task])
+getIterationByIdDB :: Connection -> String -> IO (Maybe [Iteration])
+getIterationByIdDB conn taskid = do
+  iters <- queryNamed conn "SELECT * FROM iterations WHERE taskid = :taskid" [":taskid" := taskid]
+  return $ case iters of
+    [] -> Nothing
+    _  -> Just iters
+  
+getTasksByStatusDB :: Connection -> String -> IO (Maybe [(Task, Maybe [Iteration])])
 getTasksByStatusDB conn stat = do
   tasks <- queryNamed conn "SELECT * FROM tasks WHERE status = :status" [":status" := stat]
-  return $ case tasks of 
-    [] -> Nothing
-    _  -> Just tasks
-
-
-
+  if null tasks 
+    then return Nothing
+    else do
+      taskIters <- mapM (\task -> do
+        iters <- getIterationByIdDB conn (id task) tasks
+        return (task, iters)) tasks
+      return $ Just taskIters
