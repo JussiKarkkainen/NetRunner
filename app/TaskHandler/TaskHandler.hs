@@ -15,10 +15,6 @@ import Data.Aeson (FromJSON, ToJSON)
 import Database.Database
 import Database.SQLite.Simple
 
-type Response = String -- Replace with actual type
-type InstructionData = String -- Replace with actual type
-type TaskHistory = String 
-
 data TaskData = TaskData
   { taskName  :: String
   , modelType :: String
@@ -34,7 +30,7 @@ newTaskHandler task = do
   close conn
   return $ Just $ "Created task: " ++ name
 
-deleteTaskHandler :: String -> IO (Maybe Response)
+deleteTaskHandler :: String -> IO (Maybe String)
 deleteTaskHandler iden = do
   conn <- open "tasks.db"
   name <- deleteTaskDB conn iden
@@ -48,8 +44,12 @@ updateTaskStatusHandler iden = do
   close conn
   return $ newStatus
 
-instructionInputHandler :: InstructionData -> IO (Maybe Response)
-instructionInputHandler _ = return $ Just "Instruction Processed" -- Stub
+instructionInputHandler :: String -> String -> IO (Maybe String)
+instructionInputHandler iden inst = do
+  conn <- open "tasks.db"
+  name <- instructionInputDB conn iden inst
+  close conn
+  return $ Just "Instruction Added"
 
 pollTaskHistoryHandler :: IO (Maybe [Task])
 pollTaskHistoryHandler = do

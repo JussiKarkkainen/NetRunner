@@ -5,6 +5,8 @@ module Database.Database
   ( addTaskDB
   , getAllTasksDB
   , getTaskByIdDB
+  , getTasksByStatusDB
+  , instructionInputDB
   , updateTaskStatusDB
   , deleteTaskDB
   , initializeDatabase
@@ -51,6 +53,18 @@ data Task = Task
 instance FromJSON Task
 instance ToJSON Task
 
+data Iteration = Iteration
+  { iterId          :: Int
+  , taskID          :: Int
+  , iterNum         :: Int
+  , formattedInput  :: Input
+  , formattedOutput :: Output
+  , iterCreatedAt   :: UTCTime
+  } deriving (Show, Generic)
+
+instance FromJSON Iteration
+instance ToJSON Iteration
+
 initializeDatabase :: Connection -> IO ()
 initializeDatabase conn = do
   execute_ conn
@@ -59,12 +73,24 @@ initializeDatabase conn = do
     \name TEXT NOT NULL,\
     \model_type TEXT NOT NULL,\
     \status TEXT NOT NULL DEFAULT 'pending',\
-    \system_prompt TEXT NOT NULL DEFAULT 'none',\
+    \user_prompt TEXT NOT NULL DEFAULT 'none',\
+    \created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+
+  execute_ conn
+    "CREATE TABLE IF NOT EXISTS iterations (\
+    \iterid INTEGER PRIMARY KEY AUTOINCREMENT,\
+    \taskid INTEGER NOT NULL,\
+    \iternum INTEGER NOT NULL,\
+    \input STRING NOT NULL,\
+    \output STRING NOT NULL,\
     \created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
   putStrLn "Database initialized."
 
 instance FromRow Task where
   fromRow = Task <$> field <*> field <*> field <*> field <*> field <*> field
+
+instance FromRow Iteration where
+  fromRow = Iteration <$> field <*> field <*> field <*> field <*> field <*> field
 
 addTaskDB :: Connection -> String -> String -> IO String
 addTaskDB conn name modelType = do
@@ -89,9 +115,14 @@ updateTaskStatusDB conn iden = do
       return $ Just newStatus
     _     -> return Nothing
 
+instructionInputDB :: Connection -> String -> String -> IO String
+instructionInputDB conn iden inst = do
+  execute conn "UPDATE tasks SET user_prompt = ? WHERE id = ?" (inst, iden)
+  return $ "Added Instruction: " ++ inst
+
 getAllTasksDB :: Connection -> IO [Task]
 getAllTasksDB conn = do
-  tasks <- query_ conn "SELECT id, name, model_type, status, system_prompt, created_at FROM tasks" :: IO [Task]
+  tasks <- query_ conn "SELECT * FROM tasks" :: IO [Task]
   return tasks
 
 getTaskByIdDB :: Connection -> String -> IO (Maybe Task)
@@ -100,4 +131,13 @@ getTaskByIdDB conn iden = do
   return $ case task of
     [task] -> Just task
     _      -> Nothing
+
+getTasksByStatusDB :: Connection -> String -> IO (Maybe [Task])
+getTasksByStatusDB conn stat = do
+  tasks <- queryNamed conn "SELECT * FROM tasks WHERE status = :status" [":status" := stat]
+  return $ case tasks of 
+    [] -> Nothing
+    _  -> Just tasks
+
+
 

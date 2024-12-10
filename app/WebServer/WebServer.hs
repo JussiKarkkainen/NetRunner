@@ -40,10 +40,16 @@ newTask = do
       json $ object ["error" .= ("Failed to create task" :: String)]
     Just response -> json response
 
+data Instruction = Instruction { instruction :: String, identask :: String} deriving (Show, Generic)
+instance FromJSON Instruction
+instance ToJSON Instruction
+
 instructionInput :: ActionM ()
 instructionInput = do
-  instructionData <- jsonData
-  maybeResponse <- liftIO $ instructionInputHandler instructionData
+  instructionData <- jsonData :: ActionM Instruction
+  let idValue = identask instructionData
+  let inst = instruction instructionData
+  maybeResponse <- liftIO $ instructionInputHandler idValue inst
   case maybeResponse of
     Nothing -> do
       status internalServerError500
