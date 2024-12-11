@@ -1,25 +1,16 @@
 module Main where
 
 import Database.SQLite.Simple
-import Data.Aeson (FromJSON, ToJSON)
 import Data.Time.Clock (getCurrentTime)
-import AIClient.AIClient
-import ToolUse.ToolUse
+import Data.Time (UTCTime)
+import Data.List (maximumBy)
+import Control.Monad (forever)
+import AIClient.AIClient (Input(..), Output(..), sendToModel)
+import ToolUse.ToolUse 
 import WebServer.WebServer (runServer)
 import TaskHandler.TaskHandler
 import Database.Database
 import Control.Concurrent
-
-data Input = Input 
-  { iteration :: Int
-  , ogUserPrompt :: String
-  , taskCreationTime :: UTCTime
-  , curTime :: UTCTime
-  , prevInput :: Maybe String
-  } deriving (Show, Generic)
-
-instance FromJSON Input
-instance ToJSON Input
 
 createInput :: UTCTime -> Task -> Maybe [Iteration] -> Input
 createInput curTime t mis = case mis of
@@ -27,17 +18,28 @@ createInput curTime t mis = case mis of
   Just is -> Input newIterNum (taskPrompt t) (taskCreatedAt t) curTime prevIn
     where maxIter = maximumBy (\i1 i2 -> compare (iterNum i1) (iterNum i2)) is
           newIterNum = iterNum maxIter + 1
-          prevIn = formattedInput maxIter
+          prevIn = prevInput (formattedInput maxIter)
 
-taskRunner :: Task -> Iteration
-taskRunner task = undefined 
+-- Type should be (Task, Maybe [Iteration]) -> IO (Iteration)
+taskRunner :: (Task, Maybe [Iteration]) -> IO ()
+taskRunner (task, iterList) = do
+  curTime <- getCurrentTime
+  let inputData = createInput curTime task iterList
+  sendToModel inputData
+  -- toolOut <- executeToolUse response
+  -- return $ createNewIter response toolOut
+  return ()
 
 scheduler :: IO ()
 scheduler = forever $ do
   conn <- open "tasks.db"
   runningTasks <- getTasksByStatusDB conn "running"
   close conn
-  fmap (map taskRunner) runningTasks
+  case runningTasks of
+    Nothing -> return ()
+    Just rt -> do
+      _ <- traverse taskRunner rt
+      return ()
 
 main :: IO ()
 main = do 

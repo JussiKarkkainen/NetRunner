@@ -33,6 +33,8 @@ executable Explorer
                        aeson,
                        text,
                        http-types,
+                       http-client,
+                       http-client-tls,
                        bytestring,
                        uuid,
                        process,

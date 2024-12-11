@@ -12,6 +12,7 @@ module Database.Database
   , initializeDatabase
   , Task(..)
   , TaskStatus(..)
+  , Iteration(..)
   ) where
 
 import Database.SQLite.Simple
@@ -19,8 +20,10 @@ import Database.SQLite.Simple.Ok
 import Database.SQLite.Simple.FromRow
 import Database.SQLite.Simple.FromField (FromField (fromField), returnError)
 import Data.Time (UTCTime, getCurrentTime)
-import Data.Aeson (FromJSON, ToJSON)
+import Data.Aeson (FromJSON, ToJSON, encode, decode)
+import qualified Data.ByteString.Lazy as BSL
 import GHC.Generics (Generic)
+import AIClient.AIClient (Input(..), Output(..))
 
 data TaskStatus = Running | Stopped | Finished | Pending | Undefined deriving (Show, Eq, Generic)
 
@@ -90,7 +93,17 @@ instance FromRow Task where
   fromRow = Task <$> field <*> field <*> field <*> field <*> field <*> field
 
 instance FromRow Iteration where
-  fromRow = Iteration <$> field <*> field <*> field <*> field <*> field <*> field
+  fromRow = do
+    iid <- field       -- iterid
+    tid <- field       -- taskid
+    num <- field       -- iternum
+    inputStr <- field  -- input string (JSON)
+    outputStr <- field -- output string (JSON)
+    ts <- field        -- created_at
+    case (decode (BSL.fromStrict inputStr), decode (BSL.fromStrict outputStr)) of
+        (Just input, Just output) -> 
+            return $ Iteration iid tid num input output ts
+        _ -> error "Failed to decode input/output JSON"
 
 addTaskDB :: Connection -> String -> String -> IO String
 addTaskDB conn name modelType = do
@@ -99,6 +112,12 @@ addTaskDB conn name modelType = do
     "INSERT INTO tasks (name, model_type, created_at) VALUES (?,?,?)"
     (name, modelType, currentTime)
   return name
+
+addInsertionDB :: Connection -> Iteration -> IO ()
+addInsertionDB conn iter = do
+  execute conn 
+    "INSERT INTO iterations (taskid, iternum, input, output, created_at) VALUES (?,?,?,?,?)"
+    (taskID iter, iterNum iter, BSL.toStrict $ encode (formattedInput iter), BSL.toStrict $ encode (formattedOutput iter), iterCreatedAt iter)      
 
 deleteTaskDB :: Connection -> String -> IO String
 deleteTaskDB conn iden = do
@@ -132,7 +151,7 @@ getTaskByIdDB conn iden = do
     [task] -> Just task
     _      -> Nothing
 
-getIterationByIdDB :: Connection -> String -> IO (Maybe [Iteration])
+getIterationByIdDB :: Connection -> Int -> IO (Maybe [Iteration])
 getIterationByIdDB conn taskid = do
   iters <- queryNamed conn "SELECT * FROM iterations WHERE taskid = :taskid" [":taskid" := taskid]
   return $ case iters of
@@ -141,11 +160,11 @@ getIterationByIdDB conn taskid = do
   
 getTasksByStatusDB :: Connection -> String -> IO (Maybe [(Task, Maybe [Iteration])])
 getTasksByStatusDB conn stat = do
-  tasks <- queryNamed conn "SELECT * FROM tasks WHERE status = :status" [":status" := stat]
+  tasks <- queryNamed conn "SELECT * FROM tasks WHERE status = :status" [":status" := stat] :: IO [Task]
   if null tasks 
     then return Nothing
     else do
       taskIters <- mapM (\task -> do
-        iters <- getIterationByIdDB conn (id task) tasks
+        iters <- getIterationByIdDB conn (taskId task)
         return (task, iters)) tasks
       return $ Just taskIters
