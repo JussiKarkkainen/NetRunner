@@ -2,6 +2,17 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 import json
 import threading
 
+'''
+Example of input
+  {
+    'curTime': '2024-12-11T17:02:27.877975139Z', 
+    'iteration': 0, 
+    'ogUserPrompt': 'Gather todays most important news', 
+    'prevInput': None, 
+    'taskCreationTime': '2024-12-10T15:18:57.137769742Z'
+  }
+'''
+
 class LLMServer(BaseHTTPRequestHandler):
   def do_POST(self):
     if self.path == "/model":
