@@ -5,13 +5,15 @@ module AIClient.AIClient
   ( sendToModel
   , Input(..)
   , Output(..)
+  , Command(..)
   ) where
 
 import Data.Aeson (encode, decode, FromJSON, ToJSON)
 import Data.Time (UTCTime)
+import Data.Maybe (catMaybes)
 import GHC.Generics (Generic)
 import Network.HTTP.Client
-import Data.ByteString.Lazy.Char8 as L8
+import Data.ByteString.Lazy.Char8 as L8 hiding (map, span, dropWhile, drop)
 
 data Input = Input 
   { iteration :: Int
@@ -29,19 +31,25 @@ data ServerOutput = ServerOutput
   , outText :: String
   } deriving (Show, Generic)
 
-instance FromJSON Output
-instance ToJSON Output
+instance FromJSON ServerOutput
+instance ToJSON ServerOutput
 
 data Output = Output
-  { input :: Input
-  , outText :: String
-  , commands :: [Command]
+  { formatInput :: Input
+  , formatOutText :: String
+  , formatCommands :: [Command]
   } deriving (Show, Generic)
+
+instance FromJSON Output
+instance ToJSON Output
 
 data Command = Command 
   { action :: String
   , arg    :: String
   } deriving (Show, Generic)
+
+instance FromJSON Command
+instance ToJSON Command
 
 extractJsonBlocks :: String -> [String]
 extractJsonBlocks [] = []
@@ -52,8 +60,8 @@ extractJsonBlocks str = case dropWhile (/= '{') str of
 
 parseJsonBlocks :: [String] -> [Command]
 parseJsonBlocks blocks = 
-  let decodeResult = map decode blocks
-  in catMaybes decodeResults
+  let decodeResult = map (decode . L8.pack) blocks
+  in catMaybes decodeResult
 
 extractCommands :: String -> [Command]
 extractCommands inStr = 
@@ -71,8 +79,8 @@ sendToModel payload = do
   let decodedResponse = decode (responseBody response) :: Maybe ServerOutput
   case decodedResponse of
     Just r -> do
-      let commands = extractCommands $ outText decodedResponse
-      let outParsed = Output (input decodedResponse) (outText decodedResponse) commands
-      return outParsed
+      let commands = extractCommands $ outText r
+      let outParsed = Output (input r) (outText r) commands
+      return $ Just outParsed
     Nothing -> return Nothing
 

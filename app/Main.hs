@@ -29,8 +29,9 @@ taskRunner (task, iterList) = do
   case response of
     Just r -> do
       print r
+      toolOut <- executeToolUse $ formatCommands r
+      print toolOut
       error "Stop"
-      -- toolOut <- executeToolUse r
       -- return $ createNewIter response toolOut
       return ()
     Nothing -> return ()
