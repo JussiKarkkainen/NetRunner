@@ -7,7 +7,7 @@ module AIClient.AIClient
   , Output(..)
   ) where
 
-import Data.Aeson (encode, FromJSON, ToJSON)
+import Data.Aeson (encode, decode, FromJSON, ToJSON)
 import Data.Time (UTCTime)
 import GHC.Generics (Generic)
 import Network.HTTP.Client
@@ -24,7 +24,7 @@ data Input = Input
 instance FromJSON Input
 instance ToJSON Input
 
-data Output = Output
+data ServerOutput = ServerOutput
   { input :: Input
   , outText :: String
   } deriving (Show, Generic)
@@ -32,7 +32,35 @@ data Output = Output
 instance FromJSON Output
 instance ToJSON Output
 
-sendToModel :: Input -> IO ()
+data Output = Output
+  { input :: Input
+  , outText :: String
+  , commands :: [Command]
+  } deriving (Show, Generic)
+
+data Command = Command 
+  { action :: String
+  , arg    :: String
+  } deriving (Show, Generic)
+
+extractJsonBlocks :: String -> [String]
+extractJsonBlocks [] = []
+extractJsonBlocks str = case dropWhile (/= '{') str of
+  "" -> []
+  jsonStart -> let (json, rest) = span (/= '}') jsonStart
+               in (json ++ "}") : extractJsonBlocks (drop 1 rest)
+
+parseJsonBlocks :: [String] -> [Command]
+parseJsonBlocks blocks = 
+  let decodeResult = map decode blocks
+  in catMaybes decodeResults
+
+extractCommands :: String -> [Command]
+extractCommands inStr = 
+  let jsonBlocks = extractJsonBlocks inStr
+  in parseJsonBlocks jsonBlocks
+
+sendToModel :: Input -> IO (Maybe Output)
 sendToModel payload = do
   manager <- newManager defaultManagerSettings
   let url = "http://127.0.0.1:5050/model"
@@ -40,5 +68,11 @@ sendToModel payload = do
   let jsonPayload = encode payload
   let request = initialRequest { method = "POST", requestBody = RequestBodyLBS jsonPayload } 
   response <- httpLbs request manager
-  L8.putStrLn $ responseBody response
+  let decodedResponse = decode (responseBody response) :: Maybe ServerOutput
+  case decodedResponse of
+    Just r -> do
+      let commands = extractCommands $ outText decodedResponse
+      let outParsed = Output (input decodedResponse) (outText decodedResponse) commands
+      return outParsed
+    Nothing -> return Nothing
 

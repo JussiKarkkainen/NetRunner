@@ -25,9 +25,15 @@ taskRunner :: (Task, Maybe [Iteration]) -> IO ()
 taskRunner (task, iterList) = do
   curTime <- getCurrentTime
   let inputData = createInput curTime task iterList
-  sendToModel inputData
-  -- toolOut <- executeToolUse response
-  -- return $ createNewIter response toolOut
+  response <- sendToModel inputData
+  case response of
+    Just r -> do
+      print r
+      error "Stop"
+      -- toolOut <- executeToolUse r
+      -- return $ createNewIter response toolOut
+      return ()
+    Nothing -> return ()
   return ()
 
 scheduler :: IO ()

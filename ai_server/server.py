@@ -1,17 +1,7 @@
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import json
 import threading
-
-'''
-Example of input
-  {
-    'curTime': '2024-12-11T17:02:27.877975139Z', 
-    'iteration': 0, 
-    'ogUserPrompt': 'Gather todays most important news', 
-    'prevInput': None, 
-    'taskCreationTime': '2024-12-10T15:18:57.137769742Z'
-  }
-'''
+from openai import OpenAI
 
 DEFAULT_SYSTEM_PROMPT = """
 You are an LLM integrated into an Agentic Application designed for conducting long-form research reports on various topics. 
@@ -62,6 +52,16 @@ To retrieve a specific webpage, use this format:
   - Be precise, focused, and goal-oriented in all responses.
 """
 
+'''
+Example of input
+  {
+    'curTime': '2024-12-11T17:02:27.877975139Z', 
+    'iteration': 0, 
+    'ogUserPrompt': 'Gather todays most important news', 
+    'prevInput': None, 
+    'taskCreationTime': '2024-12-10T15:18:57.137769742Z'
+  }
+'''
 
 class LLMServer(BaseHTTPRequestHandler):
   def do_POST(self):
@@ -71,19 +71,24 @@ class LLMServer(BaseHTTPRequestHandler):
       data = json.loads(post_data.decode('latin-1'))
       parsed_input = self.parse_input_data(data)
       output_string = self.generate(DEFAULT_SYSTEM_PROMPT, parsed_input)
-      response = json.dumps({"input": data, "output": output_string})
+      response = json.dumps({"input": data, "outText": output_string})
       self.send_response(200)
       self.send_header('Content-type', 'application/json')
       self.end_headers()
       self.wfile.write(response.encode('latin-1'))
 
   def generate(self, system_prompt: str, prompt: str) -> str:
-    response = f"##############################\n\n\n\n\n\nTHIS IS THE DEFAULT TEST RESPONSE FOR THE PROMPT:\n {prompt}\n\n\n\n\n\n##############################\n"
-    return response
+    client = OpenAI()
+    completion = client.chat.completions.create(
+    model="gpt-4o-mini",
+    messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": prompt}])
+    return completion.choices[0].message.content
 
   def parse_input_data(self, data):
-    prompt = data.get("ogUserprompt")
-
+    user_prompt =  (f"Original task prompt: {data.get('ogUserPrompt')}\nTask creation time: {data.get('taskCreationTime')}\n"
+                    f"Current time: {data.get('curTime')}\nIteration number: {data.get('iteration')}\n"
+                    f"Previous inputs and outputs: {data.get('preInput')}\n")
+    return user_prompt
 
 def run(server_class=HTTPServer, handler_class=LLMServer, port=5050):
   server_address = ('', port)
@@ -93,4 +98,3 @@ def run(server_class=HTTPServer, handler_class=LLMServer, port=5050):
 
 if __name__ == "__main__":
   run()
-
