@@ -7,6 +7,8 @@ module ToolUse.GeckoDriver
 
 import Network.HTTP.Client
 import Data.Aeson
+import Data.ByteString.Base64 (decode)
+import qualified Data.Text.Encoding as TE
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.Text as T
 
@@ -56,3 +58,19 @@ goToURL sessionId url = do
   let body = encode $ object ["url" .= url]
   response <- sendPostRequest endpoint body
   BL.putStr response
+
+getPageSource :: T.Text -> IO (Maybe Text)
+getPageSource sessionId = do
+  let url = "http://localhost:4444/session/" <> sessionId <> "/source"
+  response <- sendGetRequest url
+  let html = decode response :: Maybe (Object "value" Text)
+  return html
+
+getScreenshot :: T.Text -> IO (Maybe BL.ByteString)
+getScreenshot sessionId = do
+  let url = "http://localhost:4444/session/" <> sessionId <> "/screenshot"
+  response <- sendGetRequest url
+  case decode <$> decode response :: Maybe Text of
+    Just (Right screenshot) -> return (Just screenshot)
+    _ -> return Nothing
+
