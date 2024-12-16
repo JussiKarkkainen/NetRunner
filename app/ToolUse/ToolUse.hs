@@ -5,11 +5,27 @@ module ToolUse.ToolUse
 import AIClient.AIClient (Command(..))
 
 
-search :: String -> SearchOutput
+data SearchOutput = SearchOutput 
+  { query        :: String
+  , searchResult :: String
+  } deriving (Show)
+
+data BrowseOutput = BrowseOutput
+  { url          :: String
+  , browseResult :: String
+  } deriving (Show)
+
+data ToolOutput = ToolOutput
+  { tool       :: String
+  , arg        :: String
+  , toolResult :: String
+  } deriving (Show)
+
+search :: String -> IO SearchOutput
 search query = undefined
 
-browse :: String -> BrowseOutput
+browse :: String -> IO BrowseOutput
 browse url = undefined
 
-executeToolUse :: [Command] -> ToolOutput
+executeToolUse :: [Command] -> IO ToolOutput
 executeToolUse = undefined

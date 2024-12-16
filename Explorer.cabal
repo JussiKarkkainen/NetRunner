@@ -25,22 +25,24 @@ executable Explorer
                        TaskHandler.TaskHandler,
                        Database.Database,
                        AIClient.AIClient,
-                       ToolUse.ToolUse
+                       ToolUse.ToolUse,
+                       ToolUse.GeckoDriver
 
   -- other-extensions:
-  build-depends:       base >=4.13 && <4.14,
+  build-depends:       base >= 4.13 && < 4.18,
                        scotty,
                        aeson,
                        text,
                        http-types,
                        http-client,
-                       http-client-tls,
                        bytestring,
                        uuid,
                        process,
                        async,
                        time,
-                       sqlite-simple
+                       sqlite-simple,
+                       directory,
+                       filepath
 
   hs-source-dirs:      app
 

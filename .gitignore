@@ -2,3 +2,4 @@ dist-newstyle/
 *.db
 *.swp
 *.txt
+gecko/

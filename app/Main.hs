@@ -1,5 +1,9 @@
 module Main where
 
+import System.Process (createProcess, proc)
+import System.Directory (getCurrentDirectory)
+import System.FilePath ((</>))
+import Control.Concurrent
 import Database.SQLite.Simple
 import Data.Time.Clock (getCurrentTime)
 import Data.Time (UTCTime)
@@ -10,7 +14,6 @@ import ToolUse.ToolUse
 import WebServer.WebServer (runServer)
 import TaskHandler.TaskHandler
 import Database.Database
-import Control.Concurrent
 
 createInput :: UTCTime -> Task -> Maybe [Iteration] -> Input
 createInput curTime t mis = case mis of
@@ -48,10 +51,19 @@ scheduler = forever $ do
       _ <- traverse taskRunner rt
       return ()
 
+startGeckoDriver :: IO ()
+startGeckoDriver = do
+  currentDir <- getCurrentDirectory
+  let relativePath = "gecko" </> "geckodriver"
+  let fullPath = currentDir </> relativePath
+  _ <- createProcess (proc fullPath [])
+  putStrLn "GeckoDriver started" 
+
 main :: IO ()
 main = do 
   conn <- open "tasks.db"
   initializeDatabase conn
   close conn
+  startGeckoDriver
   _ <- forkIO scheduler
   runServer 8080
