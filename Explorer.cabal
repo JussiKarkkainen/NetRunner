@@ -42,7 +42,10 @@ executable Explorer
                        time,
                        sqlite-simple,
                        directory,
-                       filepath
+                       filepath,
+                       base64-bytestring,
+                       lens,
+                       lens-aeson
 
   hs-source-dirs:      app
 
