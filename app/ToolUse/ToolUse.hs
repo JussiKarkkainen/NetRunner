@@ -1,12 +1,19 @@
 {-# Language OverloadedStrings #-}
+{-# LANGUAGE DeriveGeneric #-}
 
 module ToolUse.ToolUse 
   ( executeToolUse
+  , Command(..)
+  , ToolOutput(..)
   ) where
 
-import AIClient.AIClient (Command(..))
 import qualified Data.ByteString.Lazy as BL
+import qualified Data.ByteString.Base64 as Base64
+import qualified Data.Text.Encoding as TE
+import Data.Aeson.Types (object, withObject, Parser)
 import ToolUse.GeckoDriver 
+import Data.Aeson (ToJSON(..), FromJSON(..), (.=), (.:), (.:?))
+import GHC.Generics (Generic)
 import Data.Text as T
 import Control.Concurrent (threadDelay)
 
@@ -14,18 +21,65 @@ data SearchOutput = SearchOutput
   { query        :: String
   , searchSrc    :: Maybe String
   , searchImg    :: Maybe BL.ByteString
-  } deriving (Show)
+  } deriving (Show, Generic)
+
+instance ToJSON SearchOutput where
+  toJSON (SearchOutput query searchSrc searchImg) =
+    object
+      [ "query" .= query
+      , "searchSrc" .= searchSrc
+      , "searchImg" .= (encodeBase64 <$> searchImg)
+      ]
+
+instance FromJSON SearchOutput where
+  parseJSON = withObject "SearchOutput" $ \v -> do
+    query <- v .: "query"
+    searchSrc <- v .:? "searchSrc"
+    searchImg <- v .:? "searchImg" >>= mapM (either fail return . decodeBase64)
+    return $ SearchOutput query searchSrc searchImg
 
 data BrowseOutput = BrowseOutput
   { url          :: String
   , browseSrc    :: Maybe String
   , browseImg    :: Maybe BL.ByteString
-  } deriving (Show)
+  } deriving (Show, Generic)
+
+instance ToJSON BrowseOutput where
+  toJSON (BrowseOutput url browseSrc browseImg) =
+    object
+    [ "url" .= url
+    , "browseSrc" .= browseSrc
+    , "browseImg" .= (encodeBase64 <$> browseImg)
+                            ]
+instance FromJSON BrowseOutput where
+  parseJSON = withObject "browseOutput" $ \v -> do
+    query <- v .: "url"
+    searchSrc <- v .:? "browseSrc"
+    searchImg <- v .:? "browseImg" >>= mapM (either fail return . decodeBase64)
+    return $ BrowseOutput query searchSrc searchImg
 
 data ToolOutput = ToolOutput
   { searchOut :: Maybe SearchOutput
   , browseOut :: Maybe BrowseOutput
-  } deriving (Show)
+  } deriving (Show, Generic)
+
+instance ToJSON ToolOutput
+instance FromJSON ToolOutput
+
+data Command = Command 
+  { action :: String
+  , arg    :: String
+  } deriving (Show, Generic)
+
+instance ToJSON Command
+instance FromJSON Command
+
+encodeBase64 :: BL.ByteString -> T.Text
+encodeBase64 = TE.decodeUtf8 . Base64.encode . BL.toStrict
+
+decodeBase64 :: T.Text -> Either String BL.ByteString
+decodeBase64 = fmap BL.fromStrict . Base64.decode . TE.encodeUtf8
+
 
 search :: String -> IO SearchOutput
 search query = do

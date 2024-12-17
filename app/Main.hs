@@ -9,22 +9,41 @@ import Data.Time.Clock (getCurrentTime)
 import Data.Time (UTCTime)
 import Data.List (maximumBy)
 import Control.Monad (forever)
-import AIClient.AIClient (Input(..), Output(..), sendToModel)
+import AIClient.AIClient (Input(..), ServerOutput(..), IterationOutput(..), sendToModel)
 import ToolUse.ToolUse 
 import WebServer.WebServer (runServer)
 import TaskHandler.TaskHandler
 import Database.Database
 
 createInput :: UTCTime -> Task -> Maybe [Iteration] -> Input
-createInput curTime t mis = case mis of
-  Nothing -> Input 0 (taskPrompt t) (taskCreatedAt t) curTime Nothing
-  Just is -> Input newIterNum (taskPrompt t) (taskCreatedAt t) curTime prevIn
-    where maxIter = maximumBy (\i1 i2 -> compare (iterNum i1) (iterNum i2)) is
-          newIterNum = iterNum maxIter + 1
-          prevIn = prevInput (formattedInput maxIter)
+createInput curTime task maybeIters = case maybeIters of
+  Nothing -> Input 
+      { iteration = 0
+      , ogUserPrompt = taskPrompt task
+      , taskCreationTime = taskCreatedAt task
+      , curTime = curTime
+      , prevOutput = []
+      }
+  Just iters -> Input 
+      { iteration = nextIterNum
+      , ogUserPrompt = taskPrompt task
+      , taskCreationTime = taskCreatedAt task
+      , curTime = curTime
+      , prevOutput = map formattedOutput iters
+      }
+    where
+      maxIter = maximumBy (\i1 i2 -> compare (iterNum i1) (iterNum i2)) iters
+      nextIterNum = iterNum maxIter + 1
 
-createNewIter :: Task -> Input -> Output -> ToolOutput -> Iteration
-createNewIter t i o to = Iteration null (taskId t) (iteration i) i o null
+createNewIter :: Task -> Input -> ServerOutput -> [ToolOutput] -> UTCTime -> Iteration
+createNewIter task input serverOut toolOut timestamp = Iteration
+  { iterId = 0
+  , taskID = taskId task
+  , iterNum = iteration input
+  , formattedInput = input
+  , formattedOutput = IterationOutput serverOut toolOut
+  , iterCreatedAt = timestamp
+  }
 
 taskRunner :: (Task, Maybe [Iteration]) -> IO ()
 taskRunner (task, iterList) = do
@@ -33,15 +52,13 @@ taskRunner (task, iterList) = do
   response <- sendToModel inputData
   case response of
     Just r -> do
-      print r
       toolOut <- executeToolUse $ formatCommands r
-      let iteration = createNewIter task inputData r toolOut
+      newTime <- getCurrentTime
+      let iteration = createNewIter task inputData r toolOut newTime
       conn <- open "tasks.db"
       addIterationDB conn iteration
       close conn
-      return ()
     Nothing -> return ()
-  return ()
 
 scheduler :: IO ()
 scheduler = forever $ do
@@ -51,8 +68,7 @@ scheduler = forever $ do
   case runningTasks of
     Nothing -> return ()
     Just rt -> do
-      _ <- traverse taskRunner rt
-      return ()
+      mapM_ taskRunner rt
 
 startGeckoDriver :: IO ()
 startGeckoDriver = do

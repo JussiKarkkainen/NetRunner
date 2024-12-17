@@ -60,7 +60,7 @@ Example of input
     'curTime': '2024-12-11T17:02:27.877975139Z', 
     'iteration': 0, 
     'ogUserPrompt': 'Gather todays most important news', 
-    'prevInput': None, 
+    'prevOutput': None, 
     'taskCreationTime': '2024-12-10T15:18:57.137769742Z'
   }
 '''
@@ -73,7 +73,7 @@ class LLMServer(BaseHTTPRequestHandler):
       data = json.loads(post_data.decode('latin-1'))
       parsed_input = self.parse_input_data(data)
       output_string = self.generate(DEFAULT_SYSTEM_PROMPT, parsed_input)
-      response = json.dumps({"input": data, "outText": output_string})
+      response = json.dumps({"input": data})
       self.send_response(200)
       self.send_header('Content-type', 'application/json')
       self.end_headers()
@@ -89,7 +89,7 @@ class LLMServer(BaseHTTPRequestHandler):
   def parse_input_data(self, data):
     user_prompt =  (f"Original task prompt: {data.get('ogUserPrompt')}\nTask creation time: {data.get('taskCreationTime')}\n"
                     f"Current time: {data.get('curTime')}\nIteration number: {data.get('iteration')}\n"
-                    f"Previous inputs and outputs: {data.get('preInput')}\n")
+                    f"Previous outputs: {data.get('prevOutput')}\n")
     return user_prompt
 
 def run(server_class=HTTPServer, handler_class=LLMServer, port=5050):

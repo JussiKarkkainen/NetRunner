@@ -24,7 +24,7 @@ import Data.Time (UTCTime, getCurrentTime)
 import Data.Aeson (FromJSON, ToJSON, encode, decode)
 import qualified Data.ByteString.Lazy as BSL
 import GHC.Generics (Generic)
-import AIClient.AIClient (Input(..), Output(..))
+import AIClient.AIClient (Input(..), IterationOutput(..))
 
 data TaskStatus = Running | Stopped | Finished | Pending | Undefined deriving (Show, Eq, Generic)
 
@@ -54,20 +54,20 @@ data Task = Task
   , taskCreatedAt   :: UTCTime
   } deriving (Show, Generic)
 
-instance FromJSON Task
 instance ToJSON Task
+instance FromJSON Task
 
 data Iteration = Iteration
   { iterId          :: Int
   , taskID          :: Int
   , iterNum         :: Int
   , formattedInput  :: Input
-  , formattedOutput :: Output
+  , formattedOutput :: IterationOutput
   , iterCreatedAt   :: UTCTime
   } deriving (Show, Generic)
 
-instance FromJSON Iteration
 instance ToJSON Iteration
+instance FromJSON Iteration
 
 initializeDatabase :: Connection -> IO ()
 initializeDatabase conn = do

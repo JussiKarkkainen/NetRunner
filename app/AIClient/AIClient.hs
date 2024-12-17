@@ -4,8 +4,8 @@
 module AIClient.AIClient
   ( sendToModel
   , Input(..)
-  , Output(..)
-  , Command(..)
+  , ServerOutput(..)
+  , IterationOutput(..)
   ) where
 
 import Data.Aeson (encode, decode, FromJSON, ToJSON)
@@ -14,42 +14,34 @@ import Data.Maybe (catMaybes)
 import GHC.Generics (Generic)
 import Network.HTTP.Client
 import Data.ByteString.Lazy.Char8 as L8 hiding (map, span, dropWhile, drop)
+import ToolUse.ToolUse (ToolOutput(..), Command(..))
 
 data Input = Input 
   { iteration :: Int
   , ogUserPrompt :: String
   , taskCreationTime :: UTCTime
   , curTime :: UTCTime
-  , prevInput :: Maybe String
+  , prevOutput :: [IterationOutput]
   } deriving (Show, Generic)
 
-instance FromJSON Input
 instance ToJSON Input
+instance FromJSON Input
 
 data ServerOutput = ServerOutput
-  { input :: Input
-  , outText :: String
-  } deriving (Show, Generic)
-
-instance FromJSON ServerOutput
-instance ToJSON ServerOutput
-
-data Output = Output
-  { formatInput :: Input
-  , formatOutText :: String
+  { formatOutText :: String
   , formatCommands :: [Command]
   } deriving (Show, Generic)
 
-instance FromJSON Output
-instance ToJSON Output
+instance ToJSON ServerOutput
+instance FromJSON ServerOutput
 
-data Command = Command 
-  { action :: String
-  , arg    :: String
+data IterationOutput = IterationOutput
+  { serverOutput    :: ServerOutput
+  , toolResults  :: [ToolOutput]
   } deriving (Show, Generic)
 
-instance FromJSON Command
-instance ToJSON Command
+instance ToJSON IterationOutput
+instance FromJSON IterationOutput
 
 extractJsonBlocks :: String -> [String]
 extractJsonBlocks [] = []
@@ -68,7 +60,7 @@ extractCommands inStr =
   let jsonBlocks = extractJsonBlocks inStr
   in parseJsonBlocks jsonBlocks
 
-sendToModel :: Input -> IO (Maybe Output)
+sendToModel :: Input -> IO (Maybe ServerOutput)
 sendToModel payload = do
   manager <- newManager defaultManagerSettings
   let url = "http://127.0.0.1:5050/model"
@@ -76,11 +68,11 @@ sendToModel payload = do
   let jsonPayload = encode payload
   let request = initialRequest { method = "POST", requestBody = RequestBodyLBS jsonPayload } 
   response <- httpLbs request manager
-  let decodedResponse = decode (responseBody response) :: Maybe ServerOutput
+  let decodedResponse = decode (responseBody response) :: Maybe String
   case decodedResponse of
     Just r -> do
-      let commands = extractCommands $ outText r
-      let outParsed = Output (input r) (outText r) commands
+      let commands = extractCommands r
+      let outParsed = ServerOutput r commands
       return $ Just outParsed
     Nothing -> return Nothing
 
