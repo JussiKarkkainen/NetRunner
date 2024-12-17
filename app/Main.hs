@@ -23,7 +23,9 @@ createInput curTime t mis = case mis of
           newIterNum = iterNum maxIter + 1
           prevIn = prevInput (formattedInput maxIter)
 
--- Type should be (Task, Maybe [Iteration]) -> IO (Iteration)
+createNewIter :: Task -> Input -> Output -> ToolOutput -> Iteration
+createNewIter t i o to = Iteration null (taskId t) (iteration i) i o null
+
 taskRunner :: (Task, Maybe [Iteration]) -> IO ()
 taskRunner (task, iterList) = do
   curTime <- getCurrentTime
@@ -33,9 +35,10 @@ taskRunner (task, iterList) = do
     Just r -> do
       print r
       toolOut <- executeToolUse $ formatCommands r
-      print toolOut
-      error "Stop"
-      -- return $ createNewIter response toolOut
+      let iteration = createNewIter task inputData r toolOut
+      conn <- open "tasks.db"
+      addIterationDB conn iteration
+      close conn
       return ()
     Nothing -> return ()
   return ()

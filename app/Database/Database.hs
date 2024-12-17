@@ -9,6 +9,7 @@ module Database.Database
   , instructionInputDB
   , updateTaskStatusDB
   , deleteTaskDB
+  , addIterationDB
   , initializeDatabase
   , Task(..)
   , TaskStatus(..)
@@ -113,8 +114,8 @@ addTaskDB conn name modelType = do
     (name, modelType, currentTime)
   return name
 
-addInsertionDB :: Connection -> Iteration -> IO ()
-addInsertionDB conn iter = do
+addIterationDB :: Connection -> Iteration -> IO ()
+addIterationDB conn iter = do
   execute conn 
     "INSERT INTO iterations (taskid, iternum, input, output, created_at) VALUES (?,?,?,?,?)"
     (taskID iter, iterNum iter, BSL.toStrict $ encode (formattedInput iter), BSL.toStrict $ encode (formattedOutput iter), iterCreatedAt iter)      
