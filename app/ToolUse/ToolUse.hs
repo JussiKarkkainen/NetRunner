@@ -97,6 +97,7 @@ search query = do
           pageSrc <- getPageSource sessionId
           let cleanedPageSrc = cleanHtml (T.unpack <$> pageSrc)
           -- screenshot <- getScreenshot sessionId
+          deleteSession sessionId
           return $ SearchOutput query cleanedPageSrc Nothing -- Screenshots come later
 
 browse :: String -> IO BrowseOutput
@@ -107,6 +108,7 @@ browse url = do
       goToURL sid (T.pack url)
       pageSrc <- getPageSource sid
       screenshot <- getScreenshot sid
+      deleteSession sid
       return $ BrowseOutput url (T.unpack <$> pageSrc) screenshot
     Nothing -> error "Unable to start browser session"
 

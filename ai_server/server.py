@@ -71,6 +71,7 @@ class LLMServer(BaseHTTPRequestHandler):
       content_length = int(self.headers['Content-Length'])
       post_data = self.rfile.read(content_length)
       data = json.loads(post_data.decode('latin-1'))
+      print(data)
       parsed_input = self.parse_input_data(data)
       output_string = self.generate(DEFAULT_SYSTEM_PROMPT, parsed_input)
       print(output_string)

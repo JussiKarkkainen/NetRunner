@@ -5,6 +5,7 @@ module ToolUse.GeckoDriver
   , goToURL
   , getPageSource
   , getScreenshot
+  , deleteSession
   , sendKeys
   , findElement
   ) where
@@ -32,14 +33,6 @@ instance FromJSON SessionResponse where
 createSession :: IO (Maybe T.Text)
 createSession = do
   let body = encode $ object 
-        {-
-        [ "capabilities" .= object
-          [ "alwaysMatch" .= object
-            [ "browserName" .= ("firefox" :: T.Text)
-            ]
-          ]
-        ]  
-        -}
         [ "capabilities" .= object
           [ "alwaysMatch" .= object
             [ "browserName" .= ("firefox" :: T.Text)
@@ -54,6 +47,20 @@ createSession = do
   let session = decode response :: Maybe SessionResponse
   print session
   return (sessionId <$> session)
+
+deleteSession :: T.Text -> IO ()
+deleteSession sessionId = do
+  let url = "http://localhost:4444/session/" <> T.unpack sessionId
+  _ <- sendDeleteRequest url
+  return ()
+
+sendDeleteRequest :: String -> IO BL.ByteString
+sendDeleteRequest url = do
+  manager <- newManager defaultManagerSettings
+  initialRequest <- parseRequest url
+  let request = initialRequest { method = "DELETE" }
+  response <- httpLbs request manager
+  return $ responseBody response
 
 sendPostRequest :: String -> BL.ByteString -> IO BL.ByteString
 sendPostRequest url body = do

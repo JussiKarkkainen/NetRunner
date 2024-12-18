@@ -65,7 +65,7 @@
             </form>
         </div>
     </div>
-
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script>
         async function handleInstructionSubmit(event, identask) {
             event.preventDefault();
@@ -165,6 +165,11 @@
             if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)} hours ago`;
             return `${Math.floor(diffInSeconds / 86400)} days ago`;
         }  
+
+        
+        function formatContent(content) {
+            return marked.parse(content);
+        }
         
 				function createIterationElement(iteration) {
             const iterationDiv = document.createElement('div');
@@ -183,8 +188,7 @@
             
             // Get tool results
             const toolResults = iteration.formattedOutput.toolResults;
-
-            iterationDiv.innerHTML = `
+           	iterationDiv.innerHTML = `
                 <div class="iteration-header">
                     <h3>Iteration ${iteration.iterNum}</h3>
                     <span class="timestamp">${formatTimestamp(iteration.iterCreatedAt)}</span>
@@ -192,7 +196,10 @@
                 <div class="iteration-content">
                     <div class="model-output-section">
                         <h4>Model Output</h4>
-                        <pre class="formatted-output">${JSON.stringify(formattedOutput, null, 2)}</pre>
+                        <!-- Render Markdown content -->
+                        <div class="formatted-output">
+                            ${formatContent(formattedOutput)}
+                        </div>
                     </div>
                     
                     <div class="tools-section">
@@ -218,7 +225,8 @@
                                             return `
                                                 <div class="tool-output">
                                                     <h5>${tool}</h5>
-                                                    <pre>${JSON.stringify(output, null, 2)}</pre>
+                                                    <!-- Render Markdown content -->
+                                                    <pre>${formatContent(JSON.stringify(output, null, 2))}</pre>
                                                 </div>
                                             `;
                                         }).join('')}
@@ -228,8 +236,8 @@
                         </div>
                     </div>
                 </div>
-            `;
-
+            `; 
+ 
             return iterationDiv;
         }
 
@@ -278,7 +286,7 @@
                     });
 
                     // Scroll to bottom if new content was added
-                    iterationsContainer.scrollTop = iterationsContainer.scrollHeight;
+                    // iterationsContainer.scrollTop = iterationsContainer.scrollHeight;
 
                 } catch (error) {
                     console.error('Error polling workspace:', error);
@@ -288,8 +296,8 @@
             // Initial poll
             pollWorkspace();
             
-            // Start polling every 300 seconds
-            activePolling = setInterval(pollWorkspace, 300000);
+            // Start polling every 5 seconds
+            activePolling = setInterval(pollWorkspace, 5000);
         } 
 
         async function updateTaskStatus() {
