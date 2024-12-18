@@ -17,6 +17,7 @@
             <div class="model-info">
                 <h2>Current Task: <span id="currentTask">None</span></h2>
                 <p>Model: <span id="selectedModel">None</span></p>
+                <p>Prompt: <span id="userPrompt">None</span></p>
                 <button class="status-badge" id="statusBadge" onclick="updateTaskStatus()" disabled>Idle</button>
             </div>
         </div>
@@ -340,6 +341,7 @@
                 // Update model info
                 document.getElementById('selectedModel').textContent = task.taskModelType || 'None';
                 document.getElementById('currentTask').textContent = task.taskTitle;
+                document.getElementById('userPrompt').textContent = task.taskPrompt;
                 const statusBadge = document.getElementById('statusBadge');
                 statusBadge.textContent = task.taskStatus;
                 statusBadge.disabled = false;
@@ -348,14 +350,6 @@
                 // Update workspace content
                 const workspaceContent = document.getElementById('workspaceContent');
                 workspaceContent.innerHTML = `
-                    <div class="task-details">
-                        <h3>Task Details</h3>
-                        <p><strong>Task Name:</strong> ${task.taskTitle}</p>
-                        <p><strong>Model:</strong> ${task.taskModelType}</p>
-                        <p><strong>Status:</strong> ${task.taskStatus}</p>
-                        <p><strong>Prompt:</strong> ${task.taskPrompt}</p>
-                    </div>
-                
                     <form class="instruction-form" onsubmit="handleInstructionSubmit(event, '${task.taskId}')">
                         <input 
                             type="text" 
