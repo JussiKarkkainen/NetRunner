@@ -7,6 +7,7 @@ import Control.Concurrent
 import Database.SQLite.Simple
 import Data.Time.Clock (getCurrentTime)
 import Data.Time (UTCTime)
+import Data.Maybe (catMaybes, isNothing)
 import Data.List (maximumBy)
 import Control.Monad (forever)
 import AIClient.AIClient (Input(..), ServerOutput(..), IterationOutput(..), sendToModel)
@@ -35,13 +36,13 @@ createInput curTime task maybeIters = case maybeIters of
       maxIter = maximumBy (\i1 i2 -> compare (iterNum i1) (iterNum i2)) iters
       nextIterNum = iterNum maxIter + 1
 
-createNewIter :: Task -> Input -> ServerOutput -> [ToolOutput] -> UTCTime -> Iteration
+createNewIter :: Task -> Input -> ServerOutput -> [Maybe ToolOutput] -> UTCTime -> Iteration
 createNewIter task input serverOut toolOut timestamp = Iteration
   { iterId = 0
   , taskID = taskId task
   , iterNum = iteration input
   , formattedInput = input
-  , formattedOutput = IterationOutput serverOut toolOut
+  , formattedOutput = IterationOutput serverOut (catMaybes toolOut)
   , iterCreatedAt = timestamp
   }
 
@@ -58,6 +59,12 @@ taskRunner (task, iterList) = do
       conn <- open "tasks.db"
       addIterationDB conn iteration
       close conn
+      case any isNothing toolOut of
+        False -> return ()
+        True -> do
+          conn <- open "tasks.db"
+          updateTaskStatusDB conn (show $ taskID iteration)
+          close conn
     Nothing -> return ()
 
 scheduler :: IO ()

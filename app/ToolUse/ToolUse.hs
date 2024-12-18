@@ -112,16 +112,17 @@ browse url = do
       return $ BrowseOutput url (T.unpack <$> pageSrc) screenshot
     Nothing -> error "Unable to start browser session"
 
-runCommand :: Command -> IO ToolOutput
+runCommand :: Command -> IO (Maybe ToolOutput)
 runCommand cmd = 
   case action cmd of
     "search" -> do
       searchRes <- search (arg cmd)
-      return $ ToolOutput (Just searchRes) Nothing
+      return $ Just $ ToolOutput (Just searchRes) Nothing
     "browse" -> do
       browseRes <- browse (arg cmd)
-      return $ ToolOutput Nothing (Just browseRes)
-    _        -> return $ ToolOutput Nothing Nothing
+      return $ Just $ ToolOutput Nothing (Just browseRes)
+    "finish" -> return Nothing
+    _        -> return $ Just $ ToolOutput Nothing Nothing
 
-executeToolUse :: [Command] -> IO [ToolOutput]
+executeToolUse :: [Command] -> IO [Maybe ToolOutput]
 executeToolUse cmds = mapM runCommand cmds
