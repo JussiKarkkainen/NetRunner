@@ -30,20 +30,8 @@ isUnwantedTag (TagOpen name _) = name `elem` unwantedTags
 isUnwantedTag (TagClose name) = name `elem` unwantedTags
 isUnwantedTag _               = False
 
-extractLinks :: [Tag String] -> [String]
-extractLinks = map (fromAttrib "href") . filter isLink
-  where
-    isLink (TagOpen "a" _) = True
-    isLink _               = False
-
 extractText :: [Tag String] -> [String]
 extractText = map fromTagText . filter isTagText
-
-combineTextAndLinks :: [String] -> [String] -> String
-combineTextAndLinks text links =
-  let textContent = unlines text
-      linkContent = unlines $ map (\url -> "[Link: " ++ url ++ "]") links
-  in textContent ++ "\n" ++ linkContent
 
 cleanHtml :: Maybe String -> Maybe String
 cleanHtml str = 
@@ -53,5 +41,4 @@ cleanHtml str =
       let tags = parseTags s
           filteredTags = filterTags tags
           readableText = extractText filteredTags
-          links = extractLinks filteredTags
-      in Just $ combineTextAndLinks readableText links
+      in Just $ unlines readableText
