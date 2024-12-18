@@ -6,6 +6,7 @@ module Database.Database
   , getAllTasksDB
   , getTaskByIdDB
   , getTasksByStatusDB
+  , getIterationByIdDB
   , instructionInputDB
   , updateTaskStatusDB
   , deleteTaskDB
@@ -152,7 +153,7 @@ getTaskByIdDB conn iden = do
     [task] -> Just task
     _      -> Nothing
 
-getIterationByIdDB :: Connection -> Int -> IO (Maybe [Iteration])
+getIterationByIdDB :: Connection -> String -> IO (Maybe [Iteration])
 getIterationByIdDB conn taskid = do
   iters <- queryNamed conn "SELECT * FROM iterations WHERE taskid = :taskid" [":taskid" := taskid]
   return $ case iters of
@@ -166,6 +167,6 @@ getTasksByStatusDB conn stat = do
     then return Nothing
     else do
       taskIters <- mapM (\task -> do
-        iters <- getIterationByIdDB conn (taskId task)
+        iters <- getIterationByIdDB conn (show (taskId task))
         return (task, iters)) tasks
       return $ Just taskIters

@@ -153,6 +153,86 @@
             }
         } 
 
+       	let activePolling = null;
+
+        function formatTimestamp(utcTimestamp) {
+            const date = new Date(utcTimestamp);
+            const now = new Date();
+            const diffInSeconds = Math.floor((now - date) / 1000);
+
+            if (diffInSeconds < 60) return 'just now';
+            if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)} minutes ago`;
+            if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)} hours ago`;
+            return `${Math.floor(diffInSeconds / 86400)} days ago`;
+        }  
+
+				function createIterationElement(iteration) {
+            const iterationDiv = document.createElement('div');
+            iterationDiv.className = 'iteration-card';
+            iterationDiv.innerHTML = `
+                <div class="iteration-header">
+                    <h3>Iteration ${iteration.iterNum}</h3>
+                    <span class="timestamp">${formatTimestamp(iteration.iterCreatedAt)}</span>
+                </div>
+                <div class="iteration-content">
+                    <div class="input-section">
+                        <h4>Input</h4>
+                        <pre>${JSON.stringify(iteration.formattedInput, null, 2)}</pre>
+                    </div>
+                    <div class="output-section">
+                        <h4>Output</h4>
+                        <pre>${JSON.stringify(iteration.formattedOutput, null, 2)}</pre>
+                    </div>
+                </div>
+            `;
+            return iterationDiv;
+        }
+
+       	function startPolling(taskId) {
+            // Clear any existing polling
+            if (activePolling) {
+                clearInterval(activePolling);
+            }
+
+            const iterationsContainer = document.getElementById('iterationsContainer');
+            const seenIterations = new Set();
+
+            async function pollWorkspace() {
+                try {
+                    const response = await fetch('/poll_workspace_update', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ idtask: taskId.toString() })
+                    });
+
+                    const iterations = await response.json();
+                    
+                    // Add any new iterations
+                    iterations.forEach(iteration => {
+                        if (!seenIterations.has(iteration.iterId)) {
+                            seenIterations.add(iteration.iterId);
+                            const iterationElement = createIterationElement(iteration);
+                            iterationsContainer.appendChild(iterationElement);
+                        }
+                    });
+
+                    // Scroll to bottom if new content was added
+                    iterationsContainer.scrollTop = iterationsContainer.scrollHeight;
+
+                } catch (error) {
+                    console.error('Error polling workspace:', error);
+                }
+            }
+
+            // Initial poll
+            pollWorkspace();
+            
+            // Start polling every 2 seconds
+            activePolling = setInterval(pollWorkspace, 2000);
+        } 
+
         async function updateTaskStatus() {
             const statusBadge = document.getElementById('statusBadge');
             const taskId = statusBadge.getAttribute('data-task-id');
@@ -201,11 +281,14 @@
                 // Update workspace content
                 const workspaceContent = document.getElementById('workspaceContent');
                 workspaceContent.innerHTML = `
-                    <h3>Task Details</h3>
-                    <p><strong>Task Name:</strong> ${task.taskTitle}</p>
-                    <p><strong>Model:</strong> ${task.taskModelType}</p>
-                    <p><strong>Status:</strong> ${task.taskStatus}</p>
-                    <p><strong>Prompt:</strong> ${task.taskPrompt}</p>
+                    <div class="task-details">
+                        <h3>Task Details</h3>
+                        <p><strong>Task Name:</strong> ${task.taskTitle}</p>
+                        <p><strong>Model:</strong> ${task.taskModelType}</p>
+                        <p><strong>Status:</strong> ${task.taskStatus}</p>
+                        <p><strong>Prompt:</strong> ${task.taskPrompt}</p>
+                    </div>
+                
                     <form class="instruction-form" onsubmit="handleInstructionSubmit(event, '${task.taskId}')">
                         <input 
                             type="text" 
@@ -216,7 +299,14 @@
                         >
                         <button type="submit" class="button">Send</button>
                     </form>
-                `;
+
+                    <div id="iterationsContainer" class="iterations-container">
+                        <div class="loading-message">Waiting for iterations...</div>
+                    </div>
+                `; 
+
+                startPolling(taskId);
+
             } catch (error) {
                 console.error('Error loading task workspace');
             }

@@ -55,8 +55,6 @@ taskRunner (task, iterList) = do
       toolOut <- executeToolUse $ formatCommands r
       newTime <- getCurrentTime
       let iteration = createNewIter task inputData r toolOut newTime
-      print iteration
-      error "Works until this point"
       conn <- open "tasks.db"
       addIterationDB conn iteration
       close conn

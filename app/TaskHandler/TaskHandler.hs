@@ -58,10 +58,10 @@ pollTaskHistoryHandler = do
   close conn
   return $ Just tasks
 
-pollWorkspaceUpdateHandler :: String -> IO (Maybe Task)
+pollWorkspaceUpdateHandler :: String -> IO (Maybe [Iteration])
 pollWorkspaceUpdateHandler iden = do
   conn <- open "tasks.db"
-  task <- getTaskByIdDB conn iden
+  iters <- getIterationByIdDB conn iden
   close conn
-  return task
+  return iters
 

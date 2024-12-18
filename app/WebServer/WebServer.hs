@@ -95,12 +95,12 @@ pollWorkspaceUpdate :: ActionM ()
 pollWorkspaceUpdate = do
   taskId <- jsonData :: ActionM TaskId
   let taskIdValue = idtask taskId
-  maybeTask <- liftIO $ pollWorkspaceUpdateHandler taskIdValue
-  case maybeTask of
+  maybeIters <- liftIO $ pollWorkspaceUpdateHandler taskIdValue
+  case maybeIters of
     Nothing -> do
       status internalServerError500
       json $ object ["error" .= ("Failed to poll workspace update" :: String)]
-    Just task -> json task
+    Just iters -> json iters
 
 fetchCSS :: ActionM ()
 fetchCSS = do
