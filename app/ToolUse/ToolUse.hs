@@ -12,6 +12,7 @@ import qualified Data.ByteString.Base64 as Base64
 import qualified Data.Text.Encoding as TE
 import Data.Aeson.Types (object, withObject, Parser)
 import ToolUse.GeckoDriver 
+import ToolUse.HtmlParser (cleanHtml)
 import Data.Aeson (ToJSON(..), FromJSON(..), (.=), (.:), (.:?))
 import GHC.Generics (Generic)
 import Data.Text as T
@@ -80,24 +81,23 @@ encodeBase64 = TE.decodeUtf8 . Base64.encode . BL.toStrict
 decodeBase64 :: T.Text -> Either String BL.ByteString
 decodeBase64 = fmap BL.fromStrict . Base64.decode . TE.encodeUtf8
 
-
 search :: String -> IO SearchOutput
 search query = do
   sessionIdM <- createSession
   case sessionIdM of
     Nothing -> error "Unable to create browser session" 
     Just sessionId -> do
-      goToURL sessionId "https://www.google.com"
-      elementIdM <- findElement sessionId "name" "q"
+      goToURL sessionId "https://www.duckduckgo.com"
+      elementIdM <- findElement sessionId (T.pack "xpath") (T.pack "//input[@name='q']")
       case elementIdM of
         Nothing -> error "Search bar not found"
         Just elementId -> do
           sendKeys sessionId elementId (T.pack query)
-          submitElement sessionId elementId
           threadDelay 5000000 -- TODO: Find a better way to wait for search results
           pageSrc <- getPageSource sessionId
-          screenshot <- getScreenshot sessionId
-          return $ SearchOutput query (T.unpack <$> pageSrc) screenshot
+          let cleanedPageSrc = cleanHtml (T.unpack <$> pageSrc)
+          -- screenshot <- getScreenshot sessionId
+          return $ SearchOutput query cleanedPageSrc Nothing -- Screenshots come later
 
 browse :: String -> IO BrowseOutput
 browse url = do

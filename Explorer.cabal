@@ -26,7 +26,8 @@ executable Explorer
                        Database.Database,
                        AIClient.AIClient,
                        ToolUse.ToolUse,
-                       ToolUse.GeckoDriver
+                       ToolUse.GeckoDriver,
+                       ToolUse.HtmlParser
 
   -- other-extensions:
   build-depends:       base >= 4.13 && < 4.18,
@@ -45,7 +46,8 @@ executable Explorer
                        filepath,
                        base64-bytestring,
                        lens,
-                       lens-aeson
+                       lens-aeson,
+                       tagsoup
 
   hs-source-dirs:      app
 

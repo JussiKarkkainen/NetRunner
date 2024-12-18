@@ -55,6 +55,8 @@ taskRunner (task, iterList) = do
       toolOut <- executeToolUse $ formatCommands r
       newTime <- getCurrentTime
       let iteration = createNewIter task inputData r toolOut newTime
+      print iteration
+      error "Works until this point"
       conn <- open "tasks.db"
       addIterationDB conn iteration
       close conn
@@ -70,19 +72,10 @@ scheduler = forever $ do
     Just rt -> do
       mapM_ taskRunner rt
 
-startGeckoDriver :: IO ()
-startGeckoDriver = do
-  currentDir <- getCurrentDirectory
-  let relativePath = "gecko" </> "geckodriver"
-  let fullPath = currentDir </> relativePath
-  _ <- createProcess (proc fullPath [])
-  putStrLn "GeckoDriver started" 
-
 main :: IO ()
 main = do 
   conn <- open "tasks.db"
   initializeDatabase conn
   close conn
-  startGeckoDriver
   _ <- forkIO scheduler
   runServer 8080

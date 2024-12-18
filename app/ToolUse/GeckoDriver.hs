@@ -6,7 +6,6 @@ module ToolUse.GeckoDriver
   , getPageSource
   , getScreenshot
   , sendKeys
-  , submitElement
   , findElement
   ) where
 
@@ -33,12 +32,23 @@ instance FromJSON SessionResponse where
 createSession :: IO (Maybe T.Text)
 createSession = do
   let body = encode $ object 
+        {-
         [ "capabilities" .= object
           [ "alwaysMatch" .= object
             [ "browserName" .= ("firefox" :: T.Text)
             ]
           ]
-        ] 
+        ]  
+        -}
+        [ "capabilities" .= object
+          [ "alwaysMatch" .= object
+            [ "browserName" .= ("firefox" :: T.Text)
+            , "moz:firefoxOptions" .= object
+              [ "args" .= [ "-headless" :: T.Text ]
+              ]
+            ]
+          ]
+        ]
 
   response <- sendPostRequest "http://localhost:4444/session" body
   let session = decode response :: Maybe SessionResponse
@@ -109,12 +119,9 @@ sendKeys sessionId elementId keys = do
   let endpoint = "http://localhost:4444/session/" ++ T.unpack sessionId ++ "/element/" ++ T.unpack elementId ++ "/value"
       body = encode $ object ["text" .= keys, "value" .= [keys]]
   _ <- sendPostRequest endpoint body
-  return ()
 
-submitElement :: T.Text -> T.Text -> IO ()
-submitElement sessionId elementId = do
-  let endpoint = "http://localhost:4444/session/" ++ T.unpack sessionId ++ "/element/" ++ T.unpack elementId ++ "/submit"
-  _ <- sendPostRequest endpoint ""
+  let enterBody = encode $ object ["text" .= ("\xE007" :: T.Text), "value" .= ["\xE007" :: T.Text]]
+  _ <- sendPostRequest endpoint enterBody
   return ()
 
 findElement :: T.Text -> T.Text -> T.Text -> IO (Maybe T.Text)

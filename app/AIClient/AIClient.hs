@@ -43,6 +43,13 @@ data IterationOutput = IterationOutput
 instance ToJSON IterationOutput
 instance FromJSON IterationOutput
 
+data ServerResponse = ServerResponse 
+  { output :: String
+  } deriving (Show, Generic)
+
+instance ToJSON ServerResponse
+instance FromJSON ServerResponse
+
 extractJsonBlocks :: String -> [String]
 extractJsonBlocks [] = []
 extractJsonBlocks str = case dropWhile (/= '{') str of
@@ -68,11 +75,12 @@ sendToModel payload = do
   let jsonPayload = encode payload
   let request = initialRequest { method = "POST", requestBody = RequestBodyLBS jsonPayload } 
   response <- httpLbs request manager
-  let decodedResponse = decode (responseBody response) :: Maybe String
+  let decodedResponse = decode (responseBody response) :: Maybe ServerResponse
   case decodedResponse of
     Just r -> do
-      let commands = extractCommands r
-      let outParsed = ServerOutput r commands
+      let resString = output r
+      let commands = extractCommands resString
+      let outParsed = ServerOutput resString commands
       return $ Just outParsed
     Nothing -> return Nothing
 
