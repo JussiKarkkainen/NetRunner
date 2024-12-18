@@ -11,8 +11,8 @@ import qualified Data.Text.Lazy.IO as TL
 import Data.Aeson (object, (.=), FromJSON, ToJSON)
 import Control.Monad.IO.Class (liftIO)
 import Network.HTTP.Types.Status (notFound404, internalServerError500)
-import TaskHandler.TaskHandler (newTaskHandler, deleteTaskHandler , updateTaskStatusHandler,
-                                instructionInputHandler, pollTaskHistoryHandler, pollWorkspaceUpdateHandler, TaskData)
+import TaskHandler.TaskHandler 
+                              
 
 runServer :: Int -> IO ()
 runServer port = scotty port $ do
@@ -22,6 +22,7 @@ runServer port = scotty port $ do
   post "/update_task_status" updateTaskStatus
   post "/instruction_input" instructionInput
   post "/poll_workspace_update" pollWorkspaceUpdate
+  post "/poll_task_meta" pollTaskMeta
   get "/poll_task_history" pollTaskHistory
   get "/static/styles.css" fetchCSS
 
@@ -90,6 +91,17 @@ deleteTask = do
       status internalServerError500
       json $ object ["error" .= ("Failed to delete task" :: String)]
     Just response -> json response
+
+pollTaskMeta :: ActionM ()
+pollTaskMeta = do
+  taskId <- jsonData :: ActionM TaskId
+  let taskIdValue = idtask taskId
+  maybeTask <- liftIO $ pollTaskMetaHandler taskIdValue
+  case maybeTask of
+    Nothing -> do
+      status internalServerError500
+      json $ object ["error" .= ("Failed to poll task meta update" :: String)]
+    Just t -> json t
 
 pollWorkspaceUpdate :: ActionM ()
 pollWorkspaceUpdate = do

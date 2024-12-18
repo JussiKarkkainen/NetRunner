@@ -7,6 +7,7 @@ module TaskHandler.TaskHandler
   , instructionInputHandler
   , pollTaskHistoryHandler
   , pollWorkspaceUpdateHandler
+  , pollTaskMetaHandler
   , TaskData(..)
   ) where
 
@@ -65,3 +66,9 @@ pollWorkspaceUpdateHandler iden = do
   close conn
   return iters
 
+pollTaskMetaHandler :: String -> IO (Maybe Task)
+pollTaskMetaHandler iden = do
+  conn <- open "tasks.db"
+  task <- getTaskByIdDB conn iden
+  close conn
+  return task

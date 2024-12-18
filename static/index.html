@@ -165,27 +165,86 @@
             if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)} hours ago`;
             return `${Math.floor(diffInSeconds / 86400)} days ago`;
         }  
-
+        
 				function createIterationElement(iteration) {
             const iterationDiv = document.createElement('div');
             iterationDiv.className = 'iteration-card';
+
+            // Parse the formatOutText
+            let formattedOutput;
+            try {
+                formattedOutput = JSON.parse(iteration.formattedOutput.serverOutput.formatOutText);
+            } catch (e) {
+                formattedOutput = iteration.formattedOutput.serverOutput.formatOutText;
+            }
+
+            // Get tool commands
+            const toolCommands = iteration.formattedOutput.serverOutput.formatCommands;
+            
+            // Get tool results
+            const toolResults = iteration.formattedOutput.toolResults;
+
             iterationDiv.innerHTML = `
                 <div class="iteration-header">
                     <h3>Iteration ${iteration.iterNum}</h3>
                     <span class="timestamp">${formatTimestamp(iteration.iterCreatedAt)}</span>
                 </div>
                 <div class="iteration-content">
-                    <div class="input-section">
-                        <h4>Input</h4>
-                        <pre>${JSON.stringify(iteration.formattedInput, null, 2)}</pre>
+                    <div class="model-output-section">
+                        <h4>Model Output</h4>
+                        <pre class="formatted-output">${JSON.stringify(formattedOutput, null, 2)}</pre>
                     </div>
-                    <div class="output-section">
-                        <h4>Output</h4>
-                        <pre>${JSON.stringify(iteration.formattedOutput, null, 2)}</pre>
+                    
+                    <div class="tools-section">
+                        <h4>Tool Commands</h4>
+                        <div class="tool-commands">
+                            ${toolCommands.map(command => `
+                                <div class="tool-command">
+                                    <span class="tool-action">${command.action}:</span>
+                                    <span class="tool-arg">${command.arg}</span>
+                                </div>
+                            `).join('')}
+                        </div>
+                        
+                        <div class="tool-results-container">
+                            <button class="toggle-results" onclick="toggleToolResults(this)">
+                                Show Tool Results
+                            </button>
+                            <div class="tool-results hidden">
+                                ${toolResults.map(result => `
+                                    <div class="tool-result">
+                                        ${Object.entries(result).map(([tool, output]) => {
+                                            if (!output) return '';
+                                            return `
+                                                <div class="tool-output">
+                                                    <h5>${tool}</h5>
+                                                    <pre>${JSON.stringify(output, null, 2)}</pre>
+                                                </div>
+                                            `;
+                                        }).join('')}
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
                     </div>
                 </div>
             `;
+
             return iterationDiv;
+        }
+
+        // Add this function to handle the toggle functionality
+        function toggleToolResults(button) {
+            const resultsDiv = button.nextElementSibling;
+            const isHidden = resultsDiv.classList.contains('hidden');
+            
+            if (isHidden) {
+                resultsDiv.classList.remove('hidden');
+                button.textContent = 'Hide Tool Results';
+            } else {
+                resultsDiv.classList.add('hidden');
+                button.textContent = 'Show Tool Results';
+            }
         }
 
        	function startPolling(taskId) {
@@ -229,8 +288,8 @@
             // Initial poll
             pollWorkspace();
             
-            // Start polling every 2 seconds
-            activePolling = setInterval(pollWorkspace, 2000);
+            // Start polling every 300 seconds
+            activePolling = setInterval(pollWorkspace, 300000);
         } 
 
         async function updateTaskStatus() {
@@ -260,7 +319,7 @@
 				async function selectTask(taskId) {
 
             try {
-                const response = await fetch('/poll_workspace_update', {
+                const response = await fetch('/poll_task_meta', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
