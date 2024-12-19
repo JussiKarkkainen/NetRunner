@@ -17,6 +17,7 @@ import qualified Data.ByteString.Lazy as BL
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
 import qualified Data.ByteString.Base64 as Base64
+import qualified Data.ByteString as BS
 import Data.Aeson.Lens (key, _String)
 import Control.Lens ((^?))
 
@@ -116,7 +117,12 @@ getScreenshot sessionId = do
           return Nothing
         Right base64Str -> do
           let decoded = Base64.decode (TE.encodeUtf8 base64Str)
-          return $ either (const Nothing) (Just . BL.fromStrict) decoded
+          case decoded of
+            Left err -> do
+              putStrLn $ "Base64 decode error: " <> (show err)
+              return Nothing
+            Right bytes -> do
+              return $ Just (BL.fromStrict bytes)
     _ -> do
       putStrLn "Failed to decode JSON response."
       return Nothing

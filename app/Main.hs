@@ -1,5 +1,6 @@
 module Main where
 
+import qualified Network.WebSockets as WS
 import System.Process (createProcess, proc)
 import System.Directory (getCurrentDirectory)
 import System.FilePath ((</>))
@@ -14,7 +15,7 @@ import Control.Monad (forever)
 import AIClient.AIClient (Input(..), ServerOutput(..), IterationOutput(..), sendToModel)
 import AIClient.RLClient
 import ToolUse.ToolUse 
-import ToolUse.GeckoDriver (createSession, getScreenshot)
+import ToolUse.GeckoDriver (createSession, getScreenshot, goToURL)
 import WebServer.WebServer (runServer)
 import TaskHandler.TaskHandler
 import Database.Database
@@ -84,15 +85,17 @@ scheduler = forever $ do
     Just rt -> do
       mapM_ taskRunner rt
 
-streamObservations :: T.Text -> IO ()
-streamObservations sessionid = forever $ do
+socketServer :: T.Text -> WS.PendingConnection -> IO ()
+socketServer sid pending = do
+  conn <- WS.acceptRequest pending
+  forever $ sendImage conn sid
+
+sendImage :: WS.Connection -> T.Text -> IO ()
+sendImage conn sessionid = do
   screenshot <- getScreenshot sessionid
   case screenshot of
-    Nothing -> do
-      return ()
-    Just s -> do
-      sendThroughSocket s
-  error "One image sent"
+    Nothing -> return ()
+    Just s -> WS.sendBinaryData conn s
 
 rl :: Bool
 rl = True
@@ -107,10 +110,9 @@ main = do
       _ <- forkIO scheduler
       runServer 8080
     True -> do
-      print "Hello"
       seshId <- createSession
       case seshId of
         Nothing -> error "Unable to create browser session in RL mode"
         Just sid -> do
-          streamObservations sid
-          return ()
+          goToURL sid (T.pack "https://www.duckduckgo.com")
+          WS.runServer "localhost" 8765 (socketServer sid)

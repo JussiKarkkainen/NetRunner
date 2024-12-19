@@ -25,7 +25,6 @@ executable Explorer
                        TaskHandler.TaskHandler,
                        Database.Database,
                        AIClient.AIClient,
-                       AIClient.RLClient,
                        ToolUse.ToolUse,
                        ToolUse.GeckoDriver,
                        ToolUse.HtmlParser
