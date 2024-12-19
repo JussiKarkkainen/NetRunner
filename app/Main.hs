@@ -6,12 +6,15 @@ import System.FilePath ((</>))
 import Control.Concurrent
 import Database.SQLite.Simple
 import Data.Time.Clock (getCurrentTime)
+import Data.Text as T hiding (map, filter, any)
 import Data.Time (UTCTime)
 import Data.Maybe (catMaybes, isNothing)
 import Data.List (maximumBy)
 import Control.Monad (forever)
 import AIClient.AIClient (Input(..), ServerOutput(..), IterationOutput(..), sendToModel)
+import AIClient.RLClient
 import ToolUse.ToolUse 
+import ToolUse.GeckoDriver (createSession, getScreenshot)
 import WebServer.WebServer (runServer)
 import TaskHandler.TaskHandler
 import Database.Database
@@ -81,10 +84,33 @@ scheduler = forever $ do
     Just rt -> do
       mapM_ taskRunner rt
 
+streamObservations :: T.Text -> IO ()
+streamObservations sessionid = forever $ do
+  screenshot <- getScreenshot sessionid
+  case screenshot of
+    Nothing -> do
+      return ()
+    Just s -> do
+      sendThroughSocket s
+  error "One image sent"
+
+rl :: Bool
+rl = True
+
 main :: IO ()
 main = do 
-  conn <- open "tasks.db"
-  initializeDatabase conn
-  close conn
-  _ <- forkIO scheduler
-  runServer 8080
+  case rl of 
+    False -> do
+      conn <- open "tasks.db"
+      initializeDatabase conn
+      close conn
+      _ <- forkIO scheduler
+      runServer 8080
+    True -> do
+      print "Hello"
+      seshId <- createSession
+      case seshId of
+        Nothing -> error "Unable to create browser session in RL mode"
+        Just sid -> do
+          streamObservations sid
+          return ()

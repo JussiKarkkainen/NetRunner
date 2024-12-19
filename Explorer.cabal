@@ -25,6 +25,7 @@ executable Explorer
                        TaskHandler.TaskHandler,
                        Database.Database,
                        AIClient.AIClient,
+                       AIClient.RLClient,
                        ToolUse.ToolUse,
                        ToolUse.GeckoDriver,
                        ToolUse.HtmlParser
@@ -47,7 +48,8 @@ executable Explorer
                        base64-bytestring,
                        lens,
                        lens-aeson,
-                       tagsoup
+                       tagsoup,
+                       websockets
 
   hs-source-dirs:      app
 
