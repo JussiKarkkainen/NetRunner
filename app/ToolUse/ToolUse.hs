@@ -107,9 +107,10 @@ browse url = do
     Just sid -> do
       goToURL sid (T.pack url)
       pageSrc <- getPageSource sid
-      screenshot <- getScreenshot sid
+      -- screenshot <- getScreenshot sid
       deleteSession sid
-      return $ BrowseOutput url (T.unpack <$> pageSrc) screenshot
+      let cleanedPageSrc = cleanHtml (T.unpack <$> pageSrc)
+      return $ BrowseOutput url cleanedPageSrc Nothing
     Nothing -> error "Unable to start browser session"
 
 runCommand :: Command -> IO (Maybe ToolOutput)

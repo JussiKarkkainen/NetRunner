@@ -30,11 +30,15 @@ createInput curTime task maybeIters = case maybeIters of
       , ogUserPrompt = taskPrompt task
       , taskCreationTime = taskCreatedAt task
       , curTime = curTime
-      , prevOutput = map formattedOutput iters
+      , prevOutput = formattedOutputs
       }
     where
       maxIter = maximumBy (\i1 i2 -> compare (iterNum i1) (iterNum i2)) iters
       nextIterNum = iterNum maxIter + 1
+      maxFormattedOutput = formattedOutput maxIter
+      otherServerOutputs = map (serverOutput . formattedOutput) 
+                           (filter (\iter -> iterId iter /= iterId maxIter) iters)
+      formattedOutputs = maxFormattedOutput : map (`IterationOutput` []) otherServerOutputs
 
 createNewIter :: Task -> Input -> ServerOutput -> [Maybe ToolOutput] -> UTCTime -> Iteration
 createNewIter task input serverOut toolOut timestamp = Iteration

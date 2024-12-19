@@ -83,6 +83,7 @@
 
                 if (response.ok) {
                     console.log('Instruction submitted successfully');
+                    document.getElementById('userPrompt').textContent = instruction;
                     event.target.reset();
                 } else {
                     console.error('Failed to submit instruction');
