@@ -3,8 +3,10 @@
 
 module ToolUse.ToolUse 
   ( executeToolUse
+  , executeAction
   , Command(..)
   , ToolOutput(..)
+  , BrowserEnvActionSpace(..)
   ) where
 
 import qualified Data.ByteString.Lazy as BL
@@ -127,3 +129,35 @@ runCommand cmd =
 
 executeToolUse :: [Command] -> IO [Maybe ToolOutput]
 executeToolUse cmds = mapM runCommand cmds
+
+-- RL related data types and functions
+
+data MouseAction = MouseAction
+  { mActionType :: Int
+  , x           :: Double
+  , y           :: Double
+  } deriving (Show, Generic)
+
+data KeyboardAction = KeyboardAction
+  { kActionType :: Int
+  , key         :: Int
+  , kModifiers   :: [Int]
+  } deriving (Show, Generic)
+
+data BrowserEnvActionSpace = BrowserEnvActionSpace
+  { mouseAction    :: MouseAction
+  , keyboardAction :: KeyboardAction
+  } deriving (Show, Generic)
+
+instance FromJSON MouseAction
+instance ToJSON MouseAction
+
+instance FromJSON KeyboardAction
+instance ToJSON KeyboardAction
+
+instance FromJSON BrowserEnvActionSpace
+instance ToJSON BrowserEnvActionSpace
+
+
+executeAction :: T.Text -> BrowserEnvActionSpace -> IO ()
+executeAction sessionid action = print action

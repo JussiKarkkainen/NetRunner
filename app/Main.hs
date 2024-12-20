@@ -5,15 +5,16 @@ import System.Process (createProcess, proc)
 import System.Directory (getCurrentDirectory)
 import System.FilePath ((</>))
 import Control.Concurrent
+import Control.Concurrent.Async (concurrently)
 import Database.SQLite.Simple
 import Data.Time.Clock (getCurrentTime)
 import Data.Text as T hiding (map, filter, any)
 import Data.Time (UTCTime)
 import Data.Maybe (catMaybes, isNothing)
 import Data.List (maximumBy)
+import Data.Aeson (decode)
 import Control.Monad (forever)
 import AIClient.AIClient (Input(..), ServerOutput(..), IterationOutput(..), sendToModel)
-import AIClient.RLClient
 import ToolUse.ToolUse 
 import ToolUse.GeckoDriver (createSession, getScreenshot, goToURL)
 import WebServer.WebServer (runServer)
@@ -85,17 +86,28 @@ scheduler = forever $ do
     Just rt -> do
       mapM_ taskRunner rt
 
-socketServer :: T.Text -> WS.PendingConnection -> IO ()
-socketServer sid pending = do
-  conn <- WS.acceptRequest pending
-  forever $ sendImage conn sid
-
 sendImage :: WS.Connection -> T.Text -> IO ()
 sendImage conn sessionid = do
   screenshot <- getScreenshot sessionid
   case screenshot of
     Nothing -> return ()
     Just s -> WS.sendBinaryData conn s
+
+observationServer :: T.Text -> WS.PendingConnection -> IO ()
+observationServer sid pending = do
+  conn <- WS.acceptRequest pending
+  forever $ sendImage conn sid
+
+actionServer :: T.Text -> WS.PendingConnection -> IO ()
+actionServer sid pending = do
+  conn <- WS.acceptRequest pending
+  forever $ do
+    action <- WS.receiveData conn
+    case decode action :: Maybe BrowserEnvActionSpace of
+      Just a -> do
+        WS.sendTextData conn (T.pack "Action acknowledged")
+        executeAction sid a
+      Nothing -> WS.sendTextData conn (T.pack "Invalid data format")
 
 rl :: Bool
 rl = True
@@ -115,4 +127,8 @@ main = do
         Nothing -> error "Unable to create browser session in RL mode"
         Just sid -> do
           goToURL sid (T.pack "https://www.duckduckgo.com")
-          WS.runServer "localhost" 8765 (socketServer sid)
+          putStrLn "Starting servers..."
+          concurrently
+            (WS.runServer "localhost" 8765 (observationServer sid))
+            (WS.runServer "localhost" 8766 (actionServer sid))
+          return ()
