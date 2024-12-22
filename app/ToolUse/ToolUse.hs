@@ -138,26 +138,45 @@ data MouseAction = MouseAction
   , y           :: Double
   } deriving (Show, Generic)
 
+instance FromJSON MouseAction
+instance ToJSON MouseAction
+
 data KeyboardAction = KeyboardAction
   { kActionType :: Int
   , key         :: Int
   , kModifiers   :: [Int]
   } deriving (Show, Generic)
 
+instance FromJSON KeyboardAction
+instance ToJSON KeyboardAction
+
 data BrowserEnvActionSpace = BrowserEnvActionSpace
   { mouseAction    :: MouseAction
   , keyboardAction :: KeyboardAction
   } deriving (Show, Generic)
 
-instance FromJSON MouseAction
-instance ToJSON MouseAction
-
-instance FromJSON KeyboardAction
-instance ToJSON KeyboardAction
-
 instance FromJSON BrowserEnvActionSpace
 instance ToJSON BrowserEnvActionSpace
 
+executeMouseAction :: T.Text -> MouseAction -> IO ()
+executeMouseAction sid action = sendMouseAction sid (x action) (y action)
+
+executeKeyboardAction :: T.Text -> KeyboardAction -> IO ()
+executeKeyboardAction sid action = undefined
 
 executeAction :: T.Text -> BrowserEnvActionSpace -> IO ()
-executeAction sessionid action = print action
+executeAction sessionid action = 
+	case (mMouse, mKey) of
+    (0, 0) -> return ()
+    (1, 0) -> executeMouseAction sessionid (mouseAction action)
+    (0, 1) -> executeKeyboardAction sessionid (keyboardAction action)
+    (1, 1) -> do
+      executeMouseAction sessionid (mouseAction action)
+      executeKeyboardAction sessionid (keyboardAction action)
+    _ -> error "Invalid action types"
+  where
+    mMouse = mActionType $ mouseAction action
+    mKey = kActionType $ keyboardAction action 
+
+
+    

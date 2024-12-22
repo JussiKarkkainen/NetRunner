@@ -16,7 +16,7 @@ import Data.Aeson (decode)
 import Control.Monad (forever)
 import AIClient.AIClient (Input(..), ServerOutput(..), IterationOutput(..), sendToModel)
 import ToolUse.ToolUse 
-import ToolUse.GeckoDriver (createSession, getScreenshot, goToURL)
+import ToolUse.GeckoDriver (createSession, getScreenshot, goToURL, resizeViewport)
 import WebServer.WebServer (runServer)
 import TaskHandler.TaskHandler
 import Database.Database
@@ -126,6 +126,7 @@ main = do
       case seshId of
         Nothing -> error "Unable to create browser session in RL mode"
         Just sid -> do
+          -- resizeViewport sid 480 640
           goToURL sid (T.pack "https://www.duckduckgo.com")
           putStrLn "Starting servers..."
           concurrently

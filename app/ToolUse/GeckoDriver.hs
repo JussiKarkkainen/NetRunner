@@ -3,6 +3,7 @@
 module ToolUse.GeckoDriver 
   ( createSession
   , goToURL
+  , resizeViewport
   , getPageSource
   , getScreenshot
   , deleteSession
@@ -46,7 +47,6 @@ createSession = do
 
   response <- sendPostRequest "http://localhost:4444/session" body
   let session = decode response :: Maybe SessionResponse
-  print session
   return (sessionId <$> session)
 
 deleteSession :: T.Text -> IO ()
@@ -76,12 +76,26 @@ sendPostRequest url body = do
   response <- httpLbs request manager
   return $ responseBody response
 
+resizeViewport :: T.Text -> Int -> Int -> IO ()
+resizeViewport sessionId h w = do
+  let resizeBody = encode $ object
+          [ "width" .= w
+          , "height" .= h
+          ]
+  let resizeUrl = "http://localhost:4444/session/" <> sessionId <> "/window/rect"
+  response <- sendPostRequest (T.unpack resizeUrl) resizeBody
+  return ()
+
+
 goToURL :: T.Text -> T.Text -> IO ()
 goToURL sessionId url = do
   let endpoint = "http://localhost:4444/session/" ++ T.unpack sessionId ++ "/url"
       body = encode $ object ["url" .= url]
   response <- sendPostRequest endpoint body
-  BL.putStr response
+  return ()
+
+sendMouseAction T.Text -> Double -> Double -> IO ()
+sendMouseAction = undefined
 
 sendGetRequest :: T.Text -> IO BL.ByteString
 sendGetRequest url = do
