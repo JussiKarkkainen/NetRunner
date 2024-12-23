@@ -52,15 +52,15 @@ class BrowserActionSpace:
       54: "(", 55: ")", 56: "[", 57: "]", 58: "{", 59: "}", 60: "<", 61: ">",
       # Special chars
       62: "_", 63: "-", 64: "\\", 65: "~", 66: "@", 67: "#", 68: "$",
-      69: "\\xE00D",  # Space
-      70: "\\xE006",  # Enter
-      71: "\\xE003",  # Backspace
-      72: "\\xE004",  # Tab
-      73: "\\xE00C",  # Escape
+      69: r"\xE00D",  # Space
+      70: r"\xE006",  # Enter
+      71: r"\xE003",  # Backspace
+      72: r"\xE004",  # Tab
+      73: r"\xE00C",  # Escape
       # Arrow keys
-      74: "\\xE012",  # Left
-      75: "\\xE014",  # Right
-      76: "\\xE013",  # Up
+      74: r"\xE012",  # Left
+      75: r"\xE014",  # Right
+      76: r"\xE013",  # Up
     }
     
     self.screen_width = screen_width

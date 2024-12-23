@@ -76,6 +76,7 @@ sendPostRequest url body = do
             [ ("Content-Type", "application/json") ]
         }
   response <- httpLbs request manager
+  print response
   return $ responseBody response
 
 resizeViewport :: T.Text -> Int -> Int -> IO ()
@@ -103,7 +104,7 @@ sendMouseAction sessionId x y = do
         [ "actions" .= 
           [ object
             [ "type" .= ("pointer" :: T.Text)
-            , "id" .= ("default" :: T.Text)
+            , "id" .= ("pointer1" :: T.Text)
             , "actions" .=
               [ object
                 [ "type" .= ("pointerMove" :: T.Text)
