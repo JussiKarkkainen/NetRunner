@@ -123,8 +123,7 @@ sendMouseAction sessionId x y = do
             ]
           ]
         ]
-  res <- sendPostRequest url body
-  print res
+  _ <- sendPostRequest url body
   return ()
 
 sendKeyboardAction :: T.Text -> T.Text -> IO ()

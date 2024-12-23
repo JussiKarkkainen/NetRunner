@@ -154,7 +154,7 @@ executeAction :: T.Text -> BrowserAction -> IO ()
 executeAction sessionid action = 
   case actionType action of
     0 -> return ()
-    1 -> sendMouseAction sessionid (mouseX action) (mouseY action)
-    2 -> sendKeyboardAction sessionid (T.pack (keyboardKey action))
+    1 -> sendKeyboardAction sessionid (T.pack (keyboardKey action))
+    2 -> sendMouseAction sessionid (mouseX action) (mouseY action)
     _ -> error "Invalid action types"
 

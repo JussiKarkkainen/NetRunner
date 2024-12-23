@@ -52,15 +52,15 @@ class BrowserActionSpace:
       54: "(", 55: ")", 56: "[", 57: "]", 58: "{", 59: "}", 60: "<", 61: ">",
       # Special chars
       62: "_", 63: "-", 64: "\\", 65: "~", 66: "@", 67: "#", 68: "$",
-      69: r"\xE00D",  # Space
-      70: r"\xE006",  # Enter
-      71: r"\xE003",  # Backspace
-      72: r"\xE004",  # Tab
-      73: r"\xE00C",  # Escape
+      69: "\\xE00D",  # Space
+      70: "\\xE006",  # Enter
+      71: "\\xE003",  # Backspace
+      72: "\\xE004",  # Tab
+      73: "\\xE00C",  # Escape
       # Arrow keys
-      74: r"\xE012",  # Left
-      75: r"\xE014",  # Right
-      76: r"\xE013",  # Up
+      74: "\\xE012",  # Left
+      75: "\\xE014",  # Right
+      76: "\\xE013",  # Up
     }
     
     self.screen_width = screen_width
@@ -100,18 +100,27 @@ class StreamingEnv:
     self.action_space = BrowserActionSpace(screen_width=1366, screen_height=683)
 
   def _background_listener(self):
-    async def receive_image(uri):
-      async with websockets.connect(uri) as websocket:
-        while self.running:
-          try:
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    loop.run_until_complete(self.receive_image(self.obs_uri))
+    loop.close()
+
+  async def receive_image(self, uri):
+    while self.running:
+      try:
+        async with websockets.connect(uri, ping_interval=30, ping_timeout=10) as websocket:
+          while self.running:
             image_data = await websocket.recv()
             image = Image.open(io.BytesIO(image_data))
             img_array = np.array(image)
 
             if not self.observation_queue.full():
               self.observation_queue.put(img_array)
-          except Exception as e:
-            print(f"Error in WebSocket listener: {e}")
+      except websockets.exceptions.ConnectionClosedError as e:
+        print(f"Connection closed: {e}. Reconnecting...")
+        await asyncio.sleep(1)
+      except Exception as e:
+        print(f"Error in WebSocket listener: {e}")
 
     asyncio.run(receive_image(self.obs_uri))
 
@@ -121,8 +130,8 @@ class StreamingEnv:
       response = await websocket.recv()
       print(f"Action server response: {response}")
 
-  def send_action(self, action):
-    asyncio.run(self._action_sender(action))
+  async def send_action(self, action):
+    await self._action_sender(action)
 
   def start(self):
     self.running = True
@@ -139,7 +148,7 @@ class StreamingEnv:
 
   def step(self, network_output: NetworkOutput):
     action = self.action_space.network_output_to_action(network_output)
-    self.send_action(action)
+    asyncio.run(self.send_action(action))
 
   def reset(self):
     with self.observation_queue.mutex:
