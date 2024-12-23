@@ -9,6 +9,8 @@ module ToolUse.GeckoDriver
   , deleteSession
   , sendKeys
   , findElement
+  , sendMouseAction
+  , sendKeyboardAction
   ) where
 
 import Network.HTTP.Client
@@ -94,8 +96,60 @@ goToURL sessionId url = do
   response <- sendPostRequest endpoint body
   return ()
 
-sendMouseAction T.Text -> Double -> Double -> IO ()
-sendMouseAction = undefined
+sendMouseAction :: T.Text -> Int -> Int -> IO ()
+sendMouseAction sessionId x y = do
+  let url = T.unpack $ T.concat ["http://localhost:4444/session/", sessionId, "/actions"]
+  let body = encode $ object
+        [ "actions" .= 
+          [ object
+            [ "type" .= ("pointer" :: T.Text)
+            , "id" .= ("default" :: T.Text)
+            , "actions" .=
+              [ object
+                [ "type" .= ("pointerMove" :: T.Text)
+                , "duration" .= (0 :: Int)
+                , "x" .= x
+                , "y" .= y
+                ]
+              , object
+                [ "type" .= ("pointerDown" :: T.Text)
+                , "button" .= (0 :: Int) -- Left mouse button
+                ]
+              , object
+                [ "type" .= ("pointerUp" :: T.Text)
+                , "button" .= (0 :: Int) -- Left mouse button
+                ]
+              ]
+            ]
+          ]
+        ]
+  res <- sendPostRequest url body
+  print res
+  return ()
+
+sendKeyboardAction :: T.Text -> T.Text -> IO ()
+sendKeyboardAction sessionId text = do
+  let url = T.unpack $ T.concat ["http://localhost:4444/session/", sessionId, "/actions"]
+  let actions = map (\char -> object
+        [ "type" .= ("keyDown" :: T.Text)
+        , "value" .= T.singleton char
+        ]) (T.unpack text)
+        ++ map (\char -> object
+        [ "type" .= ("keyUp" :: T.Text)
+        , "value" .= T.singleton char
+        ]) (T.unpack text)
+
+  let body = encode $ object
+        [ "actions" .= 
+          [ object
+            [ "type" .= ("key" :: T.Text)
+            , "id" .= ("default" :: T.Text)
+            , "actions" .= actions
+            ]
+          ]
+        ]
+  _ <- sendPostRequest url body
+  return ()
 
 sendGetRequest :: T.Text -> IO BL.ByteString
 sendGetRequest url = do

@@ -8,7 +8,8 @@ import websockets
 import json
 from dataclasses import dataclass
 import dataclasses
-from typing import List, Set
+from enum import Enum
+from typing import List, Set, Optional, Tuple
 from tinygrad import Tensor
 
 class ActionType(Enum):
@@ -16,62 +17,76 @@ class ActionType(Enum):
   KEYBOARD = 1
   MOUSE = 2
 
-class SimpleActionSpace:
+@dataclass
+class NetworkOutput:
+  action_type: Tensor   # shape: (3,) softmax probabilities
+  keyboard_key: Tensor  # shape (77,) softmax probabilities 
+  mouse: Tensor         # shape (2,) sigmoid coordinates in [0, 1]
+
+@dataclass
+class BrowserAction:
+  action_type: int
+  keyboard_key: str = ""
+  mouse_x: int = 0
+  mouse_y: int = 0
+
+class BrowserActionSpace:
   def __init__(self, screen_width: int, screen_height: int):
     # Basic keyboard mapping (77 actions: 76 keys + 1 no-op)
     self.keyboard_map = {
-      0: None,  # no-op
-      1: 'a', 2: 'b', 3: 'c', 4: 'd', 5: 'e', 6: 'f', 7: 'g', 8: 'h',
-      9: 'i', 10: 'j', 11: 'k', 12: 'l', 13: 'm', 14: 'n', 15: 'o', 16: 'p',
-      17: 'q', 18: 'r', 19: 's', 20: 't', 21: 'u', 22: 'v', 23: 'w', 24: 'x',
-      25: 'y', 26: 'z',
+      0: "",  # no-op
+      # Letters (lowercase)
+      1: "a", 2: "b", 3: "c", 4: "d", 5: "e", 6: "f", 7: "g", 8: "h",
+      9: "i", 10: "j", 11: "k", 12: "l", 13: "m", 14: "n", 15: "o", 16: "p",
+      17: "q", 18: "r", 19: "s", 20: "t", 21: "u", 22: "v", 23: "w", 24: "x",
+      25: "y", 26: "z",
       # Numbers
-      27: '0', 28: '1', 29: '2', 30: '3', 31: '4', 32: '5', 33: '6', 34: '7',
-      35: '8', 36: '9',
+      27: "0", 28: "1", 29: "2", 30: "3", 31: "4", 32: "5", 33: "6", 34: "7",
+      35: "8", 36: "9",
       # Punctuation
-      37: '.', 38: ',', 39: ':', 40: ';', 41: "'", 42: '"', 43: '!', 44: '?',
-      45: '`', 46: '´',
+      37: ".", 38: ",", 39: ":", 40: ";", 41: "'", 42: '"', 43: "!", 44: "?",
+      45: "`", 46: "´",
       # Operators
-      47: '+', 48: '-', 49: '*', 50: '/', 51: '^', 52: '=', 53: '%',
+      47: "+", 48: "-", 49: "*", 50: "/", 51: "^", 52: "=", 53: "%",
       # Brackets
-      54: '(', 55: ')', 56: '[', 57: ']', 58: '{', 59: '}', 60: '<', 61: '>',
+      54: "(", 55: ")", 56: "[", 57: "]", 58: "{", 59: "}", 60: "<", 61: ">",
       # Special chars
-      62: '_', 63: '-', 64: '\\', 65: '~', 66: '@', 67: '#', 68: '$',
-      # Control keys
-      69: 'SPACE', 70: 'ENTER', 71: 'BACKSPACE', 72: 'TAB', 73: 'ESCAPE',
+      62: "_", 63: "-", 64: "\\", 65: "~", 66: "@", 67: "#", 68: "$",
+      69: r"\xE00D",  # Space
+      70: r"\xE006",  # Enter
+      71: r"\xE003",  # Backspace
+      72: r"\xE004",  # Tab
+      73: r"\xE00C",  # Escape
       # Arrow keys
-      74: 'LEFT', 75: 'RIGHT', 76: 'UP'
+      74: r"\xE012",  # Left
+      75: r"\xE014",  # Right
+      76: r"\xE013",  # Up
     }
     
     self.screen_width = screen_width
     self.screen_height = screen_height
-
-  def decode_action(self, 
-                   action_type: int, 
-                   action_value: int,
-                   mouse_x: Optional[int] = None,
-                   mouse_y: Optional[int] = None) -> Tuple[ActionType, Optional[str], Optional[Tuple[int, int]]]:
-    """
-    Neural network will output:
-    - action_type: 0 (no-op), 1 (keyboard), 2 (mouse)
-    - For keyboard: action_value is the key index (0-76)
-    - For mouse: mouse_x and mouse_y are the coordinates
-    """
+		
+  def network_output_to_action(self, network_output: NetworkOutput) -> BrowserAction:
+    action_type = network_output.action_type.numpy().argmax()
+    
     if action_type == ActionType.NO_OP.value:
-      return ActionType.NO_OP, None, None
+      return BrowserAction(action_type=ActionType.NO_OP.value)
     
     elif action_type == ActionType.KEYBOARD.value:
-      key = self.keyboard_map.get(action_value)
-      return ActionType.KEYBOARD, key, None
-        
+      key_idx = network_output.keyboard_key.numpy().argmax()
+      return BrowserAction(
+          action_type=ActionType.KEYBOARD.value,
+          keyboard_key=self.keyboard_map[key_idx]
+      )
+    
     elif action_type == ActionType.MOUSE.value:
-      if mouse_x is None or mouse_y is None:
-        raise ValueError("Mouse coordinates required for mouse action")
-      # Ensure coordinates are within screen bounds
-      x = max(0, min(mouse_x, self.screen_width))
-      y = max(0, min(mouse_y, self.screen_height))
-      return ActionType.MOUSE, None, (x, y)
-        
+      mouse_coords = network_output.mouse.numpy()
+      return BrowserAction(
+          action_type=ActionType.MOUSE.value,
+          mouse_x=int(mouse_coords[0] * self.screen_width),
+          mouse_y=int(mouse_coords[1] * self.screen_height)
+      )
+    
     else:
       raise ValueError(f"Invalid action type: {action_type}")
 
@@ -82,7 +97,7 @@ class StreamingEnv:
     self.action_uri = action_uri
     self.observation_queue = queue.Queue(maxsize=1) 
     self.running = False
-		self.action_space = KeyboardActionSpace()
+    self.action_space = BrowserActionSpace(screen_width=1366, screen_height=683)
 
   def _background_listener(self):
     async def receive_image(uri):
@@ -122,91 +137,56 @@ class StreamingEnv:
   def get_observation(self):
     return self.observation_queue.get()
 
-  def verify_action(self, action):
-    return True
-
-  def step(self, action):
-    if self.verify_action(action):
-      self.send_action(action)
-    else:
-      raise Exception("Invalid action given: {action}")
+  def step(self, network_output: NetworkOutput):
+    action = self.action_space.network_output_to_action(network_output)
+    self.send_action(action)
 
   def reset(self):
     with self.observation_queue.mutex:
       self.observation_queue.queue.clear()
     return self.get_observation()
 
-@dataclass 
-class MouseAction:
-  mActionType: int
-  x: float
-  y: float
-
-@dataclass
-class KeyboardAction:
-  kActionType: int
-  key: int
-  kModifiers: List[int]
-
-@dataclass 
-class BrowerEnvActionSpace: 
-  mouseAction: MouseAction
-  keyboardAction: KeyboardAction
-
-def human_action_input():
-  mouse_action_type = 1
-  mouse_x = 0.5
-  mouse_y = 0.4
-
-  mouse_action = MouseAction(
-    mActionType=mouse_action_type,
-    x=mouse_x,
-    y=mouse_y,
+def simulate_network_output() -> NetworkOutput:
+  # softmax output for action type (NO_OP, KEYBOARD, MOUSE)
+  action_logits = Tensor([0.1, 0.2, 0.7]) 
+  
+  # softmax output for keyboard (77 possibilities)
+  keyboard_logits = Tensor.randn(77)
+  
+  # sigmoid output for mouse coordinates
+  mouse_coords = Tensor([0.5, 0.4]) 
+  
+  return NetworkOutput(
+      action_type=action_logits,
+      keyboard=keyboard_logits,
+      mouse=mouse_coords
   )
-
-  keyboard_action_type = 1
-  keyboard_key = 10
-  keyboard_modifiers = [0, 0, 0]
-
-  keyboard_action = KeyboardAction(
-    kActionType=keyboard_action_type,
-    key=keyboard_key,
-    kModifiers=keyboard_modifiers
-  )
-
-  return BrowerEnvActionSpace(
-    mouseAction=mouse_action,
-    keyboardAction=keyboard_action
-  )
-
-def display_observation(observation):
-  img = Image.fromarray(observation)
-  img = img.resize((340, 170), Image.LANCZOS)
-  img.show()
 
 def rl_loop_with_human(env):
-  env.start()  
-  print("Environment started. Press Ctrl+C to exit.")
+	env.start()
+	print("Environment started. Press Ctrl+C to exit.")
 
-  try:
-    observation = Tensor(env.get_observation())
+	try:
+		observation = Tensor(env.get_observation())
 
-    while True:
-      action = human_action_input()
-      print(observation.shape)
-      display_observation(observation.numpy())
-      env.step(action)
-      print("Action taken")
-      raise Exception
-      observation = env.get_observation()
-      display_observation(observation)
+		while True:
+			network_output = simulate_network_output()
+			
+			print("Network output:")
+			print(f"Action type probs: {network_output.action_type.tolist()}")
+			print(f"Selected action: {network_output.action_type.numpy().argmax()}")
+			
+			env.step(network_output)
+			print("Action taken")
+			raise Exception
+			
+			observation = env.get_observation()
+			time.sleep(10)
 
-      time.sleep(10)
-
-  except KeyboardInterrupt:
-    print("\nExiting loop. Stopping environment.")
-  finally:
-    env.stop()
+	except KeyboardInterrupt:
+		print("\nExiting loop. Stopping environment.")
+	finally:
+		env.stop()
 
 if __name__ == "__main__":
   env = StreamingEnv()

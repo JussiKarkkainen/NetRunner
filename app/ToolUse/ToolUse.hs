@@ -6,7 +6,7 @@ module ToolUse.ToolUse
   , executeAction
   , Command(..)
   , ToolOutput(..)
-  , BrowserEnvActionSpace(..)
+  , BrowserAction(..)
   ) where
 
 import qualified Data.ByteString.Lazy as BL
@@ -15,8 +15,9 @@ import qualified Data.Text.Encoding as TE
 import Data.Aeson.Types (object, withObject, Parser)
 import ToolUse.GeckoDriver 
 import ToolUse.HtmlParser (cleanHtml)
-import Data.Aeson (ToJSON(..), FromJSON(..), (.=), (.:), (.:?))
-import GHC.Generics (Generic)
+import Data.Aeson (ToJSON(..), FromJSON(..), (.=), (.:), (.:?), fieldLabelModifier, 
+                   genericToJSON, defaultOptions, genericParseJSON, camelTo2)
+import GHC.Generics
 import Data.Text as T
 import Control.Concurrent (threadDelay)
 
@@ -132,51 +133,28 @@ executeToolUse cmds = mapM runCommand cmds
 
 -- RL related data types and functions
 
-data MouseAction = MouseAction
-  { mActionType :: Int
-  , x           :: Double
-  , y           :: Double
+data BrowserAction = BrowserAction
+  { actionType  :: Int    -- 0: NO_OP, 1: KEYBOARD, 2: MOUSE
+  , keyboardKey :: String -- Character to be sent
+  , mouseX      :: Int    -- X coordinate
+  , mouseY      :: Int    -- Y coordinate
   } deriving (Show, Generic)
 
-instance FromJSON MouseAction
-instance ToJSON MouseAction
+instance FromJSON BrowserAction where
+  parseJSON = genericParseJSON defaultOptions
+      { fieldLabelModifier = camelTo2 '_' 
+      }
 
-data KeyboardAction = KeyboardAction
-  { kActionType :: Int
-  , key         :: Int
-  , kModifiers   :: [Int]
-  } deriving (Show, Generic)
+instance ToJSON BrowserAction where
+  toJSON = genericToJSON defaultOptions
+      { fieldLabelModifier = camelTo2 '_'
+      }
 
-instance FromJSON KeyboardAction
-instance ToJSON KeyboardAction
-
-data BrowserEnvActionSpace = BrowserEnvActionSpace
-  { mouseAction    :: MouseAction
-  , keyboardAction :: KeyboardAction
-  } deriving (Show, Generic)
-
-instance FromJSON BrowserEnvActionSpace
-instance ToJSON BrowserEnvActionSpace
-
-executeMouseAction :: T.Text -> MouseAction -> IO ()
-executeMouseAction sid action = sendMouseAction sid (x action) (y action)
-
-executeKeyboardAction :: T.Text -> KeyboardAction -> IO ()
-executeKeyboardAction sid action = undefined
-
-executeAction :: T.Text -> BrowserEnvActionSpace -> IO ()
+executeAction :: T.Text -> BrowserAction -> IO ()
 executeAction sessionid action = 
-	case (mMouse, mKey) of
-    (0, 0) -> return ()
-    (1, 0) -> executeMouseAction sessionid (mouseAction action)
-    (0, 1) -> executeKeyboardAction sessionid (keyboardAction action)
-    (1, 1) -> do
-      executeMouseAction sessionid (mouseAction action)
-      executeKeyboardAction sessionid (keyboardAction action)
+  case actionType action of
+    0 -> return ()
+    1 -> sendMouseAction sessionid (mouseX action) (mouseY action)
+    2 -> sendKeyboardAction sessionid (T.pack (keyboardKey action))
     _ -> error "Invalid action types"
-  where
-    mMouse = mActionType $ mouseAction action
-    mKey = kActionType $ keyboardAction action 
 
-
-    

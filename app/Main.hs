@@ -103,9 +103,10 @@ actionServer sid pending = do
   conn <- WS.acceptRequest pending
   forever $ do
     action <- WS.receiveData conn
-    case decode action :: Maybe BrowserEnvActionSpace of
+    case decode action :: Maybe BrowserAction of
       Just a -> do
         WS.sendTextData conn (T.pack "Action acknowledged")
+        print a
         executeAction sid a
       Nothing -> WS.sendTextData conn (T.pack "Invalid data format")
 
