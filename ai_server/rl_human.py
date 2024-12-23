@@ -8,6 +8,7 @@ from rl_server import StreamingEnv, NetworkOutput
 from dataclasses import dataclass
 from typing import Optional
 from tinygrad import Tensor
+import ast
 
 class HumanInterface:
   def __init__(self, env):
@@ -96,9 +97,10 @@ class HumanInterface:
     else:  # MOUSE
       action_probs[2] = 1.0
         
-    keyboard_logits = np.zeros(77)
+    keyboard_logits = np.zeros(78)
     if action_type == "KEYBOARD":
       key = self.key_entry.get()
+      key = key.encode().decode("unicode_escape")
       for idx, mapped_key in self.env.action_space.keyboard_map.items():
         if mapped_key == key:
           keyboard_logits[idx] = 1.0

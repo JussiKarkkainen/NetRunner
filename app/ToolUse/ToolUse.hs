@@ -150,11 +150,25 @@ instance ToJSON BrowserAction where
       { fieldLabelModifier = camelTo2 '_'
       }
 
+parseSpecial :: T.Text -> T.Text
+parseSpecial a = 
+  case a of
+    "ENTER" -> T.pack "\xE006"
+    "SPACE" -> T.pack "\xE00D"
+    "BACKSPACE" -> T.pack "\xE003"
+    "TAB" -> T.pack "\xE004"
+    "ESCAPE" -> T.pack "\xE00C"
+    "LEFT" -> T.pack "\xE012"
+    "RIGHT" -> T.pack "\xE014"
+    "UP" -> T.pack "\xE013"
+    "DOWN" -> T.pack "\xE015"
+    _ -> a
+      
 executeAction :: T.Text -> BrowserAction -> IO ()
 executeAction sessionid action = 
   case actionType action of
     0 -> return ()
-    1 -> sendKeyboardAction sessionid (T.pack (keyboardKey action))
+    1 -> sendKeyboardAction sessionid (parseSpecial (T.pack (keyboardKey action)))
     2 -> sendMouseAction sessionid (mouseX action) (mouseY action)
     _ -> error "Invalid action types"
 
