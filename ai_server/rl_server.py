@@ -92,7 +92,7 @@ class BrowserActionSpace:
       raise ValueError(f"Invalid action type: {action_type}")
 
 class StreamingEnv:
-  def __init__(self, obs_uri="ws://localhost:8765", action_uri="ws://localhost:8766", obs_shape=(170, 340, 3)):
+  def __init__(self, obs_uri="ws://localhost:8765", action_uri="ws://localhost:8766", obs_shape=(340, 170)):
     self.obs_uri = obs_uri
     self.obs_shape = obs_shape
     self.action_uri = action_uri
@@ -112,7 +112,8 @@ class StreamingEnv:
         async with websockets.connect(uri, ping_interval=30, ping_timeout=10) as websocket:
           while self.running:
             image_data = await websocket.recv()
-            image = Image.open(io.BytesIO(image_data))
+            image = Image.open(io.BytesIO(image_data)).convert("RGB")
+            image = image.resize(self.obs_shape, Image.LANCZOS)
             img_array = np.array(image)
 
             if not self.observation_queue.full():

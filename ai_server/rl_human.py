@@ -77,7 +77,6 @@ class HumanInterface:
       if not self.image_queue.empty():
         obs = self.image_queue.get_nowait()
         image = Image.fromarray(obs)
-        image = image.resize((340, 170), Image.LANCZOS)
         photo = ImageTk.PhotoImage(image)
         self.canvas.create_image(0, 0, anchor=tk.NW, image=photo)
         self.canvas.image = photo  # Keep a reference to prevent garbage collection
