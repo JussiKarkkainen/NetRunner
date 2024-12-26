@@ -1,18 +1,23 @@
+{-# LANGUAGE DeriveGeneric #-}
+
 module Main where
 
+import GHC.Generics
 import qualified Network.WebSockets as WS
 import System.Process (createProcess, proc)
 import System.Directory (getCurrentDirectory)
 import System.FilePath ((</>))
 import Control.Concurrent
 import Control.Concurrent.Async (concurrently)
+import Control.Concurrent.MVar
+import Control.Monad (void)
 import Database.SQLite.Simple
 import Data.Time.Clock (getCurrentTime)
 import Data.Text as T hiding (map, filter, any)
 import Data.Time (UTCTime)
 import Data.Maybe (catMaybes, isNothing)
 import Data.List (maximumBy)
-import Data.Aeson (decode)
+import Data.Aeson (decode, encode, FromJSON)
 import Control.Monad (forever)
 import AIClient.AIClient (Input(..), ServerOutput(..), IterationOutput(..), sendToModel)
 import ToolUse.ToolUse 
@@ -110,23 +115,29 @@ actionServer sid pending = do
         WS.sendTextData conn (encode status)
       Nothing -> WS.sendTextData conn (T.pack "Invalid data format")
 
-receiveTask :: WS.PendingConnection -> IO ()
-receiveTask pending = do
+receiveTask :: MVar (Maybe RLTask) -> WS.PendingConnection -> IO ()
+receiveTask resultVar pending = do
+  print "Waiting to receive task"
   conn <- WS.acceptRequest pending
-  task <- Ws.receiveData conn
+  task <- WS.receiveData conn
   case decode task :: Maybe RLTask of
     Just t -> do
       WS.sendTextData conn (T.pack "Task acknowledged")
-      return t
+      putMVar resultVar (Just t)
     Nothing -> do
       WS.sendTextData conn (T.pack "Invalid data format")
-      return Nothing
+      putMVar resultVar Nothing
+
+runTaskServer :: IO (Maybe RLTask)
+runTaskServer = do
+  resultVar <- newEmptyMVar
+  void $ forkIO $ WS.runServer "localhost" 8764 (receiveTask resultVar)
+  takeMVar resultVar
 
 data RLTask = RLTask 
-  { taskName :: String
+  { envName :: String
   } deriving (Show, Generic)
 
-instance ToJSON RLTask
 instance FromJSON RLTask
 
 rl :: Bool
@@ -147,16 +158,19 @@ main = do
         Nothing -> error "Unable to create browser session in RL mode"
         Just sid -> do
           resizeViewport sid 1080 1920
-          task <- WS.runServer "localhost" 8764 receiveTask
-          case (taskName task) of 
-            "wikipedia" -> do
-              let site = (T.pack "https://en.wikipedia.org/wiki/Special:Random")
-              goToURL sid site
-              putStrLn "Starting servers..."
-              concurrently
-                (WS.runServer "localhost" 8765 (observationServer sid))
-                (WS.runServer "localhost" 8766 (actionServer sid))
-              return ()
-            _ -> do
-              print "No task received from client, Quitting..."
-              return () 
+          task <- runTaskServer
+          case task of 
+            Nothing -> error "Unable to receive task"
+            Just t -> do
+              case (envName t) of 
+                "wikipedia" -> do
+                  let site = (T.pack "https://en.wikipedia.org/wiki/Special:Random")
+                  goToURL sid site
+                  putStrLn "Starting servers..."
+                  concurrently
+                    (WS.runServer "localhost" 8765 (observationServer sid))
+                    (WS.runServer "localhost" 8766 (actionServer sid))
+                  return ()
+                _ -> do
+                  print "No task received from client, Quitting..."
+                  return () 

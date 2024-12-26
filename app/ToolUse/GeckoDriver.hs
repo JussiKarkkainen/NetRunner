@@ -5,6 +5,8 @@ module ToolUse.GeckoDriver
   , goToURL
   , resizeViewport
   , getPageSource
+  , getCurrentURL
+  , executeScript
   , getScreenshot
   , deleteSession
   , sendKeys
@@ -15,7 +17,7 @@ module ToolUse.GeckoDriver
 
 import Network.HTTP.Client
 import Data.Aeson
-import Data.Aeson.Types (parseEither)
+import Data.Aeson.Types (parseEither, parseMaybe)
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
@@ -114,18 +116,20 @@ getCurrentURL sessionId = do
 executeScript :: T.Text -> String -> IO (Maybe T.Text)
 executeScript sessionId script = do
   let url = "http://localhost:4444/session/" <> sessionId <> "/execute/sync"
-	let requestBody = encode $ object
+  let requestBody = encode $ object
           [ "script" .= script
           , "args" .= ([] :: [Value])
           ]
-  response <- sendPostRequest url requestBody
- 	return $ do
-      respBody <- response 
-      case decode respBody of
-        Just (Object obj) -> do
-          value <- parseMaybe (.: "value") obj
-          return $ decodeUtf8 (BL.toStrict value)
-        _ -> Nothing 
+  response <- sendPostRequest (T.unpack url) requestBody
+  case decode response of
+    Just (Object obj) -> do
+      case parseEither (.: "value") obj of
+        Left err -> do
+          putStrLn $ "Error extracting 'value' from JSON: " ++ err
+          return Nothing
+        Right value -> return (Just value)
+      -- return $ (Just $ TE.decodeUtf8 (BL.toStrict value))
+    _ -> return $ Nothing 
       
 goToURL :: T.Text -> T.Text -> IO ()
 goToURL sessionId url = do

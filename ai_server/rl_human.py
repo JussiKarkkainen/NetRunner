@@ -117,14 +117,14 @@ class HumanInterface:
       mouse=Tensor([mouse_x, mouse_y])
     )
     
-    self.env.step(network_output)
+    action, done = self.env.step(network_output)
 
   def run(self):
     self.root.mainloop()
     self.running = False
 
 def main():
-  env = StreamingEnv()
+  env = StreamingEnv("wikipedia")
   env.start()
   
   try:

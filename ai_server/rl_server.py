@@ -1,5 +1,6 @@
 import asyncio
 import threading
+import time
 import queue
 import numpy as np
 from PIL import Image
@@ -101,17 +102,19 @@ class StreamingEnv:
     self.control_uri = control_uri
     self.observation_queue = queue.Queue(maxsize=1) 
     self.running = False
-    self.action_space = BrowserActionSpace(screen_width=1366, screen_height=683)
+    self.action_space = BrowserActionSpace(screen_width=1920, screen_height=1080)
+
+    self.action_websocket = None
     
     self.task = task
     self.task_list = ["wikipedia"]
     assert self.task in self.task_list, f"No such task as: {self.task}. Available tasks: {self.task_list}"
     asyncio.run(self._send_task())
 
- 	async def _send_task(self):
+  async def _send_task(self):
     try:
       async with websockets.connect(self.control_uri) as websocket:
-        await websocket.send(json.dumps({"taskName": self.task}))
+        await websocket.send(json.dumps({"envName": self.task}))
         response = await websocket.recv()
         print(f"Response from control server: {response}")
     except Exception as e:
@@ -140,16 +143,21 @@ class StreamingEnv:
         await asyncio.sleep(1)
       except Exception as e:
         print(f"Error in WebSocket listener: {e}")
+        time.sleep(5)
 
     asyncio.run(receive_image(self.obs_uri))
 
+  async def _connect_action_websocket(self):
+    if self.action_websocket is None or self.action_websocket.closed:
+      self.action_websocket = await websockets.connect(self.action_uri)
+
   async def _action_sender(self, action):
-    async with websockets.connect(self.action_uri) as websocket:
-      await websocket.send(json.dumps(dataclasses.asdict(action)))
-      response = await websocket.recv()
-      reward = response["reward"]
-      done = response["done"]
-      return reward, done
+    if not hasattr(self, 'action_websocket') or self.action_websocket is None:
+      await self._connect_action_websocket()
+    await self.action_websocket.send(json.dumps(dataclasses.asdict(action)))
+    response = await self.action_websocket.recv()
+    response_data = json.loads(response)
+    return response_data.get("reward", 0), response_data.get("done", False)
 
   async def send_action(self, action):
     return await self._action_sender(action)
@@ -161,6 +169,8 @@ class StreamingEnv:
 
   def stop(self):
     self.running = False
+    if hasattr(self, 'action_websocket') and self.action_websocket:
+      asyncio.run(self.action_websocket.close())
     if self.listener_thread.is_alive():
         self.listener_thread.join()
 

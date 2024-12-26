@@ -14,6 +14,7 @@ import qualified Data.ByteString.Lazy as BL
 import qualified Data.ByteString.Base64 as Base64
 import qualified Data.Text.Encoding as TE
 import Data.Aeson.Types (object, withObject, Parser)
+import Data.Maybe (fromMaybe)
 import ToolUse.GeckoDriver 
 import ToolUse.HtmlParser (cleanHtml)
 import Data.Aeson (ToJSON(..), FromJSON(..), (.=), (.:), (.:?), fieldLabelModifier, 
@@ -174,28 +175,31 @@ instance FromJSON RLStatus
 instance ToJSON RLStatus
 
 data EnvStatus = EnvStatus 
-  { url       :: T.Text
+  { rlUrl     :: T.Text
   , scrollPos :: Int
   } deriving (Show, Generic)
 
 getBrowserState :: T.Text -> IO (EnvStatus)
-getBrowserState = do
-  currentUrl <- getCurrentURL sessionid
-  scrollY <- executeScript sessionid "return window.scrollY;"
-  return $ EnvState currentUrl scrollY
+getBrowserState sessionid = do
+  maybeCurrentUrl <- getCurrentURL sessionid
+  maybeScrollY <- executeScript sessionid "return window.scrollY;"
+  let currentUrl = fromMaybe (error "Failed to fetch current URL") maybeCurrentUrl
+      scrollYText = fromMaybe (error "Failed to fetch scrollY") maybeScrollY
+  let y = read $ T.unpack scrollYText
+  return $ EnvStatus currentUrl y
 
 calculateReward :: EnvStatus -> EnvStatus -> RLStatus
 calculateReward b a = 
-  if url afterState == "https://en.wikipedia.org/wiki/Reinforcement_learning" then
+  if rlUrl a == "https://en.wikipedia.org/wiki/Reinforcement_learning" then
     RLStatus 100 True
-  else if url b /= url a then
+  else if rlUrl b /= rlUrl a then
     RLStatus 10 False
-  else if scrollPosition a > scrollPosition b then
+  else if scrollPos a > scrollPos b then
     RLStatus 1 False
-  else RLStatus -1 False
+  else RLStatus (-1) False
 
 executeAction :: T.Text -> BrowserAction -> IO (RLStatus)
-executeAction sessionid action = 
+executeAction sessionid action = do
   beforeState <- getBrowserState sessionid
   case actionType action of
     0 -> return ()
