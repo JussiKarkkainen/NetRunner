@@ -79,6 +79,13 @@ sendPostRequest url body = do
   print response
   return $ responseBody response
 
+sendGetRequest :: T.Text -> IO BL.ByteString
+sendGetRequest url = do
+  manager <- newManager defaultManagerSettings
+  request <- parseRequest (T.unpack url)
+  response <- httpLbs request manager
+  return $ responseBody response
+
 resizeViewport :: T.Text -> Int -> Int -> IO ()
 resizeViewport sessionId h w = do
   let resizeBody = encode $ object
@@ -89,7 +96,37 @@ resizeViewport sessionId h w = do
   response <- sendPostRequest (T.unpack resizeUrl) resizeBody
   return ()
 
+getCurrentURL :: T.Text -> IO (Maybe T.Text)
+getCurrentURL sessionId = do
+  let url = "htto://localhost:4444/session/" <> sessionId <> "url"
+  response <- sendGetRequest url
+  case decode response :: Maybe Value of
+    Just (Object obj) -> 
+      case parseEither (.: "value") obj of
+        Left err -> do
+          putStrLn $ "Error extracting 'value' from JSON: " ++ err
+          return Nothing
+        Right value -> return (Just value)
+    _ -> do
+      putStrLn "Failed to decode JSON response."
+      return Nothing
 
+executeScript :: T.Text -> String -> IO (Maybe T.Text)
+executeScript sessionId script = do
+  let url = "http://localhost:4444/session/" <> sessionId <> "/execute/sync"
+	let requestBody = encode $ object
+          [ "script" .= script
+          , "args" .= ([] :: [Value])
+          ]
+  response <- sendPostRequest url requestBody
+ 	return $ do
+      respBody <- response 
+      case decode respBody of
+        Just (Object obj) -> do
+          value <- parseMaybe (.: "value") obj
+          return $ decodeUtf8 (BL.toStrict value)
+        _ -> Nothing 
+      
 goToURL :: T.Text -> T.Text -> IO ()
 goToURL sessionId url = do
   let endpoint = "http://localhost:4444/session/" ++ T.unpack sessionId ++ "/url"
@@ -150,13 +187,6 @@ sendKeyboardAction sessionId text = do
         ]
   _ <- sendPostRequest url body
   return ()
-
-sendGetRequest :: T.Text -> IO BL.ByteString
-sendGetRequest url = do
-  manager <- newManager defaultManagerSettings
-  request <- parseRequest (T.unpack url)
-  response <- httpLbs request manager
-  return $ responseBody response
 
 getPageSource :: T.Text -> IO (Maybe T.Text)
 getPageSource sessionId = do

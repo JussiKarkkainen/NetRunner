@@ -105,10 +105,29 @@ actionServer sid pending = do
     action <- WS.receiveData conn
     case decode action :: Maybe BrowserAction of
       Just a -> do
-        WS.sendTextData conn (T.pack "Action acknowledged")
         print a
-        executeAction sid a
+        status <- executeAction sid a
+        WS.sendTextData conn (encode status)
       Nothing -> WS.sendTextData conn (T.pack "Invalid data format")
+
+receiveTask :: WS.PendingConnection -> IO ()
+receiveTask pending = do
+  conn <- WS.acceptRequest pending
+  task <- Ws.receiveData conn
+  case decode task :: Maybe RLTask of
+    Just t -> do
+      WS.sendTextData conn (T.pack "Task acknowledged")
+      return t
+    Nothing -> do
+      WS.sendTextData conn (T.pack "Invalid data format")
+      return Nothing
+
+data RLTask = RLTask 
+  { taskName :: String
+  } deriving (Show, Generic)
+
+instance ToJSON RLTask
+instance FromJSON RLTask
 
 rl :: Bool
 rl = True
@@ -127,10 +146,17 @@ main = do
       case seshId of
         Nothing -> error "Unable to create browser session in RL mode"
         Just sid -> do
-          -- resizeViewport sid 480 640
-          goToURL sid (T.pack "https://www.duckduckgo.com")
-          putStrLn "Starting servers..."
-          concurrently
-            (WS.runServer "localhost" 8765 (observationServer sid))
-            (WS.runServer "localhost" 8766 (actionServer sid))
-          return ()
+          resizeViewport sid 1080 1920
+          task <- WS.runServer "localhost" 8764 receiveTask
+          case (taskName task) of 
+            "wikipedia" -> do
+              let site = (T.pack "https://en.wikipedia.org/wiki/Special:Random")
+              goToURL sid site
+              putStrLn "Starting servers..."
+              concurrently
+                (WS.runServer "localhost" 8765 (observationServer sid))
+                (WS.runServer "localhost" 8766 (actionServer sid))
+              return ()
+            _ -> do
+              print "No task received from client, Quitting..."
+              return () 

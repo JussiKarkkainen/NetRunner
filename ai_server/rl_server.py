@@ -20,7 +20,7 @@ class ActionType(Enum):
 @dataclass
 class NetworkOutput:
   action_type: Tensor   # shape: (3,) softmax probabilities
-  keyboard_key: Tensor  # shape (77,) softmax probabilities 
+  keyboard_key: Tensor  # shape (78,) softmax probabilities 
   mouse: Tensor         # shape (2,) sigmoid coordinates in [0, 1]
 
 @dataclass
@@ -66,6 +66,7 @@ class BrowserActionSpace:
     
     self.screen_width = screen_width
     self.screen_height = screen_height
+
 		
   def network_output_to_action(self, network_output: NetworkOutput) -> BrowserAction:
     action_type = network_output.action_type.numpy().argmax()
@@ -92,14 +93,30 @@ class BrowserActionSpace:
       raise ValueError(f"Invalid action type: {action_type}")
 
 class StreamingEnv:
-  def __init__(self, obs_uri="ws://localhost:8765", action_uri="ws://localhost:8766", obs_shape=(340, 170)):
+  def __init__(self, task, obs_uri="ws://localhost:8765", action_uri="ws://localhost:8766", control_uri="ws://localhost:8764", 
+               obs_shape=(340, 170)):
     self.obs_uri = obs_uri
     self.obs_shape = obs_shape
     self.action_uri = action_uri
+    self.control_uri = control_uri
     self.observation_queue = queue.Queue(maxsize=1) 
     self.running = False
     self.action_space = BrowserActionSpace(screen_width=1366, screen_height=683)
+    
+    self.task = task
+    self.task_list = ["wikipedia"]
+    assert self.task in self.task_list, f"No such task as: {self.task}. Available tasks: {self.task_list}"
+    asyncio.run(self._send_task())
 
+ 	async def _send_task(self):
+    try:
+      async with websockets.connect(self.control_uri) as websocket:
+        await websocket.send(json.dumps({"taskName": self.task}))
+        response = await websocket.recv()
+        print(f"Response from control server: {response}")
+    except Exception as e:
+      print(f"Error during WebSocket communication with control server: {e}")
+ 
   def _background_listener(self):
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
@@ -130,10 +147,12 @@ class StreamingEnv:
     async with websockets.connect(self.action_uri) as websocket:
       await websocket.send(json.dumps(dataclasses.asdict(action)))
       response = await websocket.recv()
-      print(f"Action server response: {response}")
+      reward = response["reward"]
+      done = response["done"]
+      return reward, done
 
   async def send_action(self, action):
-    await self._action_sender(action)
+    return await self._action_sender(action)
 
   def start(self):
     self.running = True
@@ -150,7 +169,8 @@ class StreamingEnv:
 
   def step(self, network_output: NetworkOutput):
     action = self.action_space.network_output_to_action(network_output)
-    asyncio.run(self.send_action(action))
+    reward, done = asyncio.run(self.send_action(action))
+    return reward, done
 
   def reset(self):
     with self.observation_queue.mutex:
@@ -187,7 +207,7 @@ def rl_loop_with_human(env):
 			print(f"Action type probs: {network_output.action_type.tolist()}")
 			print(f"Selected action: {network_output.action_type.numpy().argmax()}")
 			
-			env.step(network_output)
+			reward, done = env.step(network_output)
 			print("Action taken")
 			raise Exception
 			
@@ -200,6 +220,6 @@ def rl_loop_with_human(env):
 		env.stop()
 
 if __name__ == "__main__":
-  env = StreamingEnv()
+  env = StreamingEnv("wikipedia")
   rl_loop_with_human(env)
 

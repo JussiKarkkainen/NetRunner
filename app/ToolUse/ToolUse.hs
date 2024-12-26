@@ -7,6 +7,7 @@ module ToolUse.ToolUse
   , Command(..)
   , ToolOutput(..)
   , BrowserAction(..)
+  , RLStatus(..)
   ) where
 
 import qualified Data.ByteString.Lazy as BL
@@ -163,12 +164,44 @@ parseSpecial a =
     "UP" -> T.pack "\xE013"
     "DOWN" -> T.pack "\xE015"
     _ -> a
-      
-executeAction :: T.Text -> BrowserAction -> IO ()
+
+data RLStatus = RLStatus
+  { reward :: Int
+  , done   :: Bool
+  } deriving (Show, Generic)
+
+instance FromJSON RLStatus
+instance ToJSON RLStatus
+
+data EnvStatus = EnvStatus 
+  { url       :: T.Text
+  , scrollPos :: Int
+  } deriving (Show, Generic)
+
+getBrowserState :: T.Text -> IO (EnvStatus)
+getBrowserState = do
+  currentUrl <- getCurrentURL sessionid
+  scrollY <- executeScript sessionid "return window.scrollY;"
+  return $ EnvState currentUrl scrollY
+
+calculateReward :: EnvStatus -> EnvStatus -> RLStatus
+calculateReward b a = 
+  if url afterState == "https://en.wikipedia.org/wiki/Reinforcement_learning" then
+    RLStatus 100 True
+  else if url b /= url a then
+    RLStatus 10 False
+  else if scrollPosition a > scrollPosition b then
+    RLStatus 1 False
+  else RLStatus -1 False
+
+executeAction :: T.Text -> BrowserAction -> IO (RLStatus)
 executeAction sessionid action = 
+  beforeState <- getBrowserState sessionid
   case actionType action of
     0 -> return ()
     1 -> sendKeyboardAction sessionid (parseSpecial (T.pack (keyboardKey action)))
     2 -> sendMouseAction sessionid (mouseX action) (mouseY action)
     _ -> error "Invalid action types"
+  afterState <- getBrowserState sessionid
+  return $ calculateReward beforeState afterState
 
