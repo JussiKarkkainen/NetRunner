@@ -3,18 +3,23 @@
 
 module ToolUse.ToolUse 
   ( executeToolUse
+  , executeAction
   , Command(..)
   , ToolOutput(..)
+  , BrowserAction(..)
+  , RLStatus(..)
   ) where
 
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.ByteString.Base64 as Base64
 import qualified Data.Text.Encoding as TE
 import Data.Aeson.Types (object, withObject, Parser)
+import Data.Maybe (fromMaybe)
 import ToolUse.GeckoDriver 
 import ToolUse.HtmlParser (cleanHtml)
-import Data.Aeson (ToJSON(..), FromJSON(..), (.=), (.:), (.:?))
-import GHC.Generics (Generic)
+import Data.Aeson (ToJSON(..), FromJSON(..), (.=), (.:), (.:?), fieldLabelModifier, 
+                   genericToJSON, defaultOptions, genericParseJSON, camelTo2)
+import GHC.Generics
 import Data.Text as T
 import Control.Concurrent (threadDelay)
 
@@ -127,3 +132,80 @@ runCommand cmd =
 
 executeToolUse :: [Command] -> IO [Maybe ToolOutput]
 executeToolUse cmds = mapM runCommand cmds
+
+-- RL related data types and functions
+
+data BrowserAction = BrowserAction
+  { actionType  :: Int    -- 0: NO_OP, 1: KEYBOARD, 2: MOUSE
+  , keyboardKey :: String -- Character to be sent
+  , mouseX      :: Int    -- X coordinate
+  , mouseY      :: Int    -- Y coordinate
+  } deriving (Show, Generic)
+
+instance FromJSON BrowserAction where
+  parseJSON = genericParseJSON defaultOptions
+      { fieldLabelModifier = camelTo2 '_' 
+      }
+
+instance ToJSON BrowserAction where
+  toJSON = genericToJSON defaultOptions
+      { fieldLabelModifier = camelTo2 '_'
+      }
+
+parseSpecial :: T.Text -> T.Text
+parseSpecial a = 
+  case a of
+    "ENTER" -> T.pack "\xE006"
+    "SPACE" -> T.pack "\xE00D"
+    "BACKSPACE" -> T.pack "\xE003"
+    "TAB" -> T.pack "\xE004"
+    "ESCAPE" -> T.pack "\xE00C"
+    "LEFT" -> T.pack "\xE012"
+    "RIGHT" -> T.pack "\xE014"
+    "UP" -> T.pack "\xE013"
+    "DOWN" -> T.pack "\xE015"
+    _ -> a
+
+data RLStatus = RLStatus
+  { reward :: Int
+  , done   :: Bool
+  } deriving (Show, Generic)
+
+instance FromJSON RLStatus
+instance ToJSON RLStatus
+
+data EnvStatus = EnvStatus 
+  { rlUrl     :: T.Text
+  , scrollPos :: Double
+  } deriving (Show, Generic)
+
+getBrowserState :: T.Text -> IO (EnvStatus)
+getBrowserState sessionid = do
+  maybeCurrentUrl <- getCurrentURL sessionid
+  maybeScrollY <- executeScript sessionid "return window.scrollY;"
+  let currentUrl = fromMaybe (error "Failed to fetch current URL") maybeCurrentUrl
+      scrollYText = fromMaybe (error "Failed to fetch scrollY") maybeScrollY
+  let y = read (T.unpack scrollYText) :: Double
+  return $ EnvStatus currentUrl y
+
+calculateReward :: EnvStatus -> EnvStatus -> RLStatus
+calculateReward b a = 
+  if rlUrl a == "https://en.wikipedia.org/wiki/Reinforcement_learning" then
+    RLStatus 100 True
+  else if rlUrl b /= rlUrl a then
+    RLStatus 10 False
+  else if scrollPos a > scrollPos b then
+    RLStatus 1 False
+  else RLStatus (-1) False
+
+executeAction :: T.Text -> BrowserAction -> IO (RLStatus)
+executeAction sessionid action = do
+  beforeState <- getBrowserState sessionid
+  case actionType action of
+    0 -> return ()
+    1 -> sendKeyboardAction sessionid (parseSpecial (T.pack (keyboardKey action)))
+    2 -> sendMouseAction sessionid (mouseX action) (mouseY action)
+    _ -> error "Invalid action types"
+  afterState <- getBrowserState sessionid
+  return $ calculateReward beforeState afterState
+

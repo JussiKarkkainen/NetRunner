@@ -3,22 +3,29 @@
 module ToolUse.GeckoDriver 
   ( createSession
   , goToURL
+  , resizeViewport
   , getPageSource
+  , getCurrentURL
+  , executeScript
   , getScreenshot
   , deleteSession
   , sendKeys
   , findElement
+  , sendMouseAction
+  , sendKeyboardAction
   ) where
 
 import Network.HTTP.Client
 import Data.Aeson
-import Data.Aeson.Types (parseEither)
+import Data.Aeson.Types (parseEither, parseMaybe)
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
 import qualified Data.ByteString.Base64 as Base64
+import qualified Data.ByteString as BS
 import Data.Aeson.Lens (key, _String)
 import Control.Lens ((^?))
+import Data.Scientific (toBoundedInteger)
 
 data SessionResponse = SessionResponse
   { sessionId :: T.Text
@@ -45,7 +52,6 @@ createSession = do
 
   response <- sendPostRequest "http://localhost:4444/session" body
   let session = decode response :: Maybe SessionResponse
-  print session
   return (sessionId <$> session)
 
 deleteSession :: T.Text -> IO ()
@@ -73,14 +79,8 @@ sendPostRequest url body = do
             [ ("Content-Type", "application/json") ]
         }
   response <- httpLbs request manager
+  print response
   return $ responseBody response
-
-goToURL :: T.Text -> T.Text -> IO ()
-goToURL sessionId url = do
-  let endpoint = "http://localhost:4444/session/" ++ T.unpack sessionId ++ "/url"
-      body = encode $ object ["url" .= url]
-  response <- sendPostRequest endpoint body
-  BL.putStr response
 
 sendGetRequest :: T.Text -> IO BL.ByteString
 sendGetRequest url = do
@@ -88,6 +88,114 @@ sendGetRequest url = do
   request <- parseRequest (T.unpack url)
   response <- httpLbs request manager
   return $ responseBody response
+
+resizeViewport :: T.Text -> Int -> Int -> IO ()
+resizeViewport sessionId h w = do
+  let resizeBody = encode $ object
+          [ "width" .= w
+          , "height" .= h
+          ]
+  let resizeUrl = "http://localhost:4444/session/" <> sessionId <> "/window/rect"
+  response <- sendPostRequest (T.unpack resizeUrl) resizeBody
+  return ()
+
+getCurrentURL :: T.Text -> IO (Maybe T.Text)
+getCurrentURL sessionId = do
+  let url = "http://localhost:4444/session/" <> sessionId <> "/url"
+  response <- sendGetRequest url
+  case decode response :: Maybe Value of
+    Just (Object obj) -> 
+      case parseEither (.: "value") obj of
+        Left err -> do
+          putStrLn $ "(getCurrentURL) Error extracting 'value' from JSON: " ++ err
+          return Nothing
+        Right value -> return (Just value)
+    _ -> do
+      putStrLn "Failed to decode JSON response."
+      return Nothing
+
+executeScript :: T.Text -> String -> IO (Maybe T.Text)
+executeScript sessionId script = do
+  let url = "http://localhost:4444/session/" <> sessionId <> "/execute/sync"
+  let requestBody = encode $ object
+          [ "script" .= script
+          , "args" .= ([] :: [Value]) 
+          ]
+  response <- sendPostRequest (T.unpack url) requestBody
+  case decode response of
+    Just (Object obj) -> do
+      case parseEither (.: "value") obj of
+        Left err -> do
+          putStrLn $ "(executeScript) Error extracting 'value' from JSON: " ++ err
+          return Nothing
+        Right (Number num) -> return $ Just (T.pack (show num))
+        Right _ -> do
+          putStrLn "(executeScript) Unexpected non-number 'value' in JSON."
+          return Nothing
+    _ -> do
+      putStrLn "(executeScript) Failed to decode JSON response."
+      return Nothing
+
+goToURL :: T.Text -> T.Text -> IO ()
+goToURL sessionId url = do
+  let endpoint = "http://localhost:4444/session/" ++ T.unpack sessionId ++ "/url"
+      body = encode $ object ["url" .= url]
+  response <- sendPostRequest endpoint body
+  return ()
+
+sendMouseAction :: T.Text -> Int -> Int -> IO ()
+sendMouseAction sessionId x y = do
+  let url = T.unpack $ T.concat ["http://localhost:4444/session/", sessionId, "/actions"]
+  let body = encode $ object
+        [ "actions" .= 
+          [ object
+            [ "type" .= ("pointer" :: T.Text)
+            , "id" .= ("pointer1" :: T.Text)
+            , "actions" .=
+              [ object
+                [ "type" .= ("pointerMove" :: T.Text)
+                , "duration" .= (0 :: Int)
+                , "x" .= x
+                , "y" .= y
+                ]
+              , object
+                [ "type" .= ("pointerDown" :: T.Text)
+                , "button" .= (0 :: Int) -- Left mouse button
+                ]
+              , object
+                [ "type" .= ("pointerUp" :: T.Text)
+                , "button" .= (0 :: Int) -- Left mouse button
+                ]
+              ]
+            ]
+          ]
+        ]
+  _ <- sendPostRequest url body
+  return ()
+
+sendKeyboardAction :: T.Text -> T.Text -> IO ()
+sendKeyboardAction sessionId text = do
+  let url = T.unpack $ T.concat ["http://localhost:4444/session/", sessionId, "/actions"]
+  let actions = map (\char -> object
+        [ "type" .= ("keyDown" :: T.Text)
+        , "value" .= T.singleton char
+        ]) (T.unpack text)
+        ++ map (\char -> object
+        [ "type" .= ("keyUp" :: T.Text)
+        , "value" .= T.singleton char
+        ]) (T.unpack text)
+
+  let body = encode $ object
+        [ "actions" .= 
+          [ object
+            [ "type" .= ("key" :: T.Text)
+            , "id" .= ("default" :: T.Text)
+            , "actions" .= actions
+            ]
+          ]
+        ]
+  _ <- sendPostRequest url body
+  return ()
 
 getPageSource :: T.Text -> IO (Maybe T.Text)
 getPageSource sessionId = do
@@ -97,7 +205,7 @@ getPageSource sessionId = do
     Just (Object obj) -> 
       case parseEither (.: "value") obj of
         Left err -> do
-          putStrLn $ "Error extracting 'value' from JSON: " ++ err
+          putStrLn $ "(getPageSource) Error extracting 'value' from JSON: " ++ err
           return Nothing
         Right value -> return (Just value)
     _ -> do
@@ -112,11 +220,16 @@ getScreenshot sessionId = do
     Just (Object obj) -> do
       case parseEither (.: "value") obj of
         Left err -> do
-          putStrLn $ "Error extracting 'value' from JSON: " ++ err
+          putStrLn $ "(getScreenshot) Error extracting 'value' from JSON: " ++ err
           return Nothing
         Right base64Str -> do
           let decoded = Base64.decode (TE.encodeUtf8 base64Str)
-          return $ either (const Nothing) (Just . BL.fromStrict) decoded
+          case decoded of
+            Left err -> do
+              putStrLn $ "Base64 decode error: " <> (show err)
+              return Nothing
+            Right bytes -> do
+              return $ Just (BL.fromStrict bytes)
     _ -> do
       putStrLn "Failed to decode JSON response."
       return Nothing

@@ -47,7 +47,9 @@ executable Explorer
                        base64-bytestring,
                        lens,
                        lens-aeson,
-                       tagsoup
+                       tagsoup,
+                       websockets,
+                       scientific
 
   hs-source-dirs:      app
 

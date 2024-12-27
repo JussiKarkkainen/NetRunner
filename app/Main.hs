@@ -1,17 +1,27 @@
+{-# LANGUAGE DeriveGeneric #-}
+
 module Main where
 
+import GHC.Generics
+import qualified Network.WebSockets as WS
 import System.Process (createProcess, proc)
 import System.Directory (getCurrentDirectory)
 import System.FilePath ((</>))
 import Control.Concurrent
+import Control.Concurrent.Async (concurrently)
+import Control.Concurrent.MVar
+import Control.Monad (void)
 import Database.SQLite.Simple
 import Data.Time.Clock (getCurrentTime)
+import Data.Text as T hiding (map, filter, any)
 import Data.Time (UTCTime)
 import Data.Maybe (catMaybes, isNothing)
 import Data.List (maximumBy)
+import Data.Aeson (decode, encode, FromJSON)
 import Control.Monad (forever)
 import AIClient.AIClient (Input(..), ServerOutput(..), IterationOutput(..), sendToModel)
 import ToolUse.ToolUse 
+import ToolUse.GeckoDriver (createSession, getScreenshot, goToURL, resizeViewport)
 import WebServer.WebServer (runServer)
 import TaskHandler.TaskHandler
 import Database.Database
@@ -81,10 +91,87 @@ scheduler = forever $ do
     Just rt -> do
       mapM_ taskRunner rt
 
+sendImage :: WS.Connection -> T.Text -> IO ()
+sendImage conn sessionid = do
+  screenshot <- getScreenshot sessionid
+  case screenshot of
+    Nothing -> return ()
+    Just s -> WS.sendBinaryData conn s
+
+observationServer :: T.Text -> WS.PendingConnection -> IO ()
+observationServer sid pending = do
+  conn <- WS.acceptRequest pending
+  forever $ sendImage conn sid
+
+actionServer :: T.Text -> WS.PendingConnection -> IO ()
+actionServer sid pending = do
+  conn <- WS.acceptRequest pending
+  forever $ do
+    action <- WS.receiveData conn
+    case decode action :: Maybe BrowserAction of
+      Just a -> do
+        print a
+        status <- executeAction sid a
+        print status
+        WS.sendTextData conn (encode status)
+      Nothing -> WS.sendTextData conn (T.pack "Invalid data format")
+
+receiveTask :: MVar (Maybe RLTask) -> WS.PendingConnection -> IO ()
+receiveTask resultVar pending = do
+  print "Waiting to receive task"
+  conn <- WS.acceptRequest pending
+  task <- WS.receiveData conn
+  case decode task :: Maybe RLTask of
+    Just t -> do
+      WS.sendTextData conn (T.pack "Task acknowledged")
+      putMVar resultVar (Just t)
+    Nothing -> do
+      WS.sendTextData conn (T.pack "Invalid data format")
+      putMVar resultVar Nothing
+
+runTaskServer :: IO (Maybe RLTask)
+runTaskServer = do
+  resultVar <- newEmptyMVar
+  void $ forkIO $ WS.runServer "localhost" 8764 (receiveTask resultVar)
+  takeMVar resultVar
+
+data RLTask = RLTask 
+  { envName :: String
+  } deriving (Show, Generic)
+
+instance FromJSON RLTask
+
+rl :: Bool
+rl = True
+
 main :: IO ()
 main = do 
-  conn <- open "tasks.db"
-  initializeDatabase conn
-  close conn
-  _ <- forkIO scheduler
-  runServer 8080
+  case rl of 
+    False -> do
+      conn <- open "tasks.db"
+      initializeDatabase conn
+      close conn
+      _ <- forkIO scheduler
+      runServer 8080
+    True -> do
+      seshId <- createSession
+      case seshId of
+        Nothing -> error "Unable to create browser session in RL mode"
+        Just sid -> do
+          resizeViewport sid 1080 1920
+          task <- runTaskServer
+          case task of 
+            Nothing -> error "Unable to receive task"
+            Just t -> do
+              case (envName t) of 
+                "wikipedia" -> do
+                  let site = (T.pack "https://en.wikipedia.org/wiki/Special:Random")
+                  goToURL sid site
+                  putStrLn "Starting servers..."
+                  concurrently
+                    (WS.runServer "localhost" 8765 (observationServer sid))
+                    (WS.runServer "localhost" 8766 (actionServer sid))
+                  return ()
+                _ -> do
+                  print "No task received from client, Quitting..."
+                  return () 
