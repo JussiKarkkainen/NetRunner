@@ -112,6 +112,7 @@ actionServer sid pending = do
       Just a -> do
         print a
         status <- executeAction sid a
+        print status
         WS.sendTextData conn (encode status)
       Nothing -> WS.sendTextData conn (T.pack "Invalid data format")
 

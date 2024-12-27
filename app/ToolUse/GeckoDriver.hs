@@ -25,6 +25,7 @@ import qualified Data.ByteString.Base64 as Base64
 import qualified Data.ByteString as BS
 import Data.Aeson.Lens (key, _String)
 import Control.Lens ((^?))
+import Data.Scientific (toBoundedInteger)
 
 data SessionResponse = SessionResponse
   { sessionId :: T.Text
@@ -100,13 +101,13 @@ resizeViewport sessionId h w = do
 
 getCurrentURL :: T.Text -> IO (Maybe T.Text)
 getCurrentURL sessionId = do
-  let url = "htto://localhost:4444/session/" <> sessionId <> "url"
+  let url = "http://localhost:4444/session/" <> sessionId <> "/url"
   response <- sendGetRequest url
   case decode response :: Maybe Value of
     Just (Object obj) -> 
       case parseEither (.: "value") obj of
         Left err -> do
-          putStrLn $ "Error extracting 'value' from JSON: " ++ err
+          putStrLn $ "(getCurrentURL) Error extracting 'value' from JSON: " ++ err
           return Nothing
         Right value -> return (Just value)
     _ -> do
@@ -118,19 +119,23 @@ executeScript sessionId script = do
   let url = "http://localhost:4444/session/" <> sessionId <> "/execute/sync"
   let requestBody = encode $ object
           [ "script" .= script
-          , "args" .= ([] :: [Value])
+          , "args" .= ([] :: [Value]) 
           ]
   response <- sendPostRequest (T.unpack url) requestBody
   case decode response of
     Just (Object obj) -> do
       case parseEither (.: "value") obj of
         Left err -> do
-          putStrLn $ "Error extracting 'value' from JSON: " ++ err
+          putStrLn $ "(executeScript) Error extracting 'value' from JSON: " ++ err
           return Nothing
-        Right value -> return (Just value)
-      -- return $ (Just $ TE.decodeUtf8 (BL.toStrict value))
-    _ -> return $ Nothing 
-      
+        Right (Number num) -> return $ Just (T.pack (show num))
+        Right _ -> do
+          putStrLn "(executeScript) Unexpected non-number 'value' in JSON."
+          return Nothing
+    _ -> do
+      putStrLn "(executeScript) Failed to decode JSON response."
+      return Nothing
+
 goToURL :: T.Text -> T.Text -> IO ()
 goToURL sessionId url = do
   let endpoint = "http://localhost:4444/session/" ++ T.unpack sessionId ++ "/url"
@@ -200,7 +205,7 @@ getPageSource sessionId = do
     Just (Object obj) -> 
       case parseEither (.: "value") obj of
         Left err -> do
-          putStrLn $ "Error extracting 'value' from JSON: " ++ err
+          putStrLn $ "(getPageSource) Error extracting 'value' from JSON: " ++ err
           return Nothing
         Right value -> return (Just value)
     _ -> do
@@ -215,7 +220,7 @@ getScreenshot sessionId = do
     Just (Object obj) -> do
       case parseEither (.: "value") obj of
         Left err -> do
-          putStrLn $ "Error extracting 'value' from JSON: " ++ err
+          putStrLn $ "(getScreenshot) Error extracting 'value' from JSON: " ++ err
           return Nothing
         Right base64Str -> do
           let decoded = Base64.decode (TE.encodeUtf8 base64Str)

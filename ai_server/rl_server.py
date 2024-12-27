@@ -102,10 +102,8 @@ class StreamingEnv:
     self.control_uri = control_uri
     self.observation_queue = queue.Queue(maxsize=1) 
     self.running = False
-    self.action_space = BrowserActionSpace(screen_width=1920, screen_height=1080)
+    self.action_space = BrowserActionSpace(screen_width=1920, screen_height=995)
 
-    self.action_websocket = None
-    
     self.task = task
     self.task_list = ["wikipedia"]
     assert self.task in self.task_list, f"No such task as: {self.task}. Available tasks: {self.task_list}"
@@ -133,6 +131,7 @@ class StreamingEnv:
           while self.running:
             image_data = await websocket.recv()
             image = Image.open(io.BytesIO(image_data)).convert("RGB")
+            print(np.array(image).shape)
             image = image.resize(self.obs_shape, Image.LANCZOS)
             img_array = np.array(image)
 
@@ -147,17 +146,15 @@ class StreamingEnv:
 
     asyncio.run(receive_image(self.obs_uri))
 
-  async def _connect_action_websocket(self):
-    if self.action_websocket is None or self.action_websocket.closed:
-      self.action_websocket = await websockets.connect(self.action_uri)
-
   async def _action_sender(self, action):
-    if not hasattr(self, 'action_websocket') or self.action_websocket is None:
-      await self._connect_action_websocket()
-    await self.action_websocket.send(json.dumps(dataclasses.asdict(action)))
-    response = await self.action_websocket.recv()
-    response_data = json.loads(response)
-    return response_data.get("reward", 0), response_data.get("done", False)
+    try:
+      async with websockets.connect(self.action_uri) as websocket:
+        await websocket.send(json.dumps(dataclasses.asdict(action)))
+        response = await websocket.recv()
+        response_data = json.loads(response)
+        return response_data.get("reward", 0), response_data.get("done", False)
+    except Exception as e:
+      print(f"Error during WebSocket communication with action server: {e}")
 
   async def send_action(self, action):
     return await self._action_sender(action)

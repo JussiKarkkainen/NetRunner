@@ -176,7 +176,7 @@ instance ToJSON RLStatus
 
 data EnvStatus = EnvStatus 
   { rlUrl     :: T.Text
-  , scrollPos :: Int
+  , scrollPos :: Double
   } deriving (Show, Generic)
 
 getBrowserState :: T.Text -> IO (EnvStatus)
@@ -185,7 +185,7 @@ getBrowserState sessionid = do
   maybeScrollY <- executeScript sessionid "return window.scrollY;"
   let currentUrl = fromMaybe (error "Failed to fetch current URL") maybeCurrentUrl
       scrollYText = fromMaybe (error "Failed to fetch scrollY") maybeScrollY
-  let y = read $ T.unpack scrollYText
+  let y = read (T.unpack scrollYText) :: Double
   return $ EnvStatus currentUrl y
 
 calculateReward :: EnvStatus -> EnvStatus -> RLStatus

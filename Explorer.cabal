@@ -48,7 +48,8 @@ executable Explorer
                        lens,
                        lens-aeson,
                        tagsoup,
-                       websockets
+                       websockets,
+                       scientific
 
   hs-source-dirs:      app
 
