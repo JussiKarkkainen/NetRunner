@@ -107,17 +107,8 @@ class StreamingEnv:
     self.task = task
     self.task_list = ["wikipedia"]
     assert self.task in self.task_list, f"No such task as: {self.task}. Available tasks: {self.task_list}"
-    asyncio.run(self._send_task())
+    asyncio.run(self._send_command("init"))
 
-  async def _send_task(self):
-    try:
-      async with websockets.connect(self.control_uri) as websocket:
-        await websocket.send(json.dumps({"envName": self.task}))
-        response = await websocket.recv()
-        print(f"Response from control server: {response}")
-    except Exception as e:
-      print(f"Error during WebSocket communication with control server: {e}")
- 
   def _background_listener(self):
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
@@ -159,15 +150,27 @@ class StreamingEnv:
   async def send_action(self, action):
     return await self._action_sender(action)
 
+  async def _send_command(self, cmd):
+    try:
+      async with websockets.connect(self.control_uri) as websocket:
+        if cmd == "init":
+          await websocket.send(json.dumps({"command": cmd, "envName": self.task}))
+        else:
+          await websocket.send(json.dumps({"command": cmd, "envName": None}))
+        response = await websocket.recv()
+        print(f"Response from control server: {response}")
+    except Exception as e:
+      print(f"Error during WebSocket communication with control server: {e}")
+
   def start(self):
     self.running = True
+    self._send_command("start")
     self.listener_thread = threading.Thread(target=self._background_listener, daemon=True)
     self.listener_thread.start()
 
   def stop(self):
     self.running = False
-    if hasattr(self, 'action_websocket') and self.action_websocket:
-      asyncio.run(self.action_websocket.close())
+    self._send_command("stop")
     if self.listener_thread.is_alive():
         self.listener_thread.join()
 
@@ -180,6 +183,7 @@ class StreamingEnv:
     return reward, done
 
   def reset(self):
+    asyncio.run(self._send_command("reset"))
     with self.observation_queue.mutex:
       self.observation_queue.queue.clear()
     return self.get_observation()

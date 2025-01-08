@@ -10,7 +10,8 @@ import System.FilePath ((</>))
 import Control.Concurrent
 import Control.Concurrent.Async (concurrently)
 import Control.Concurrent.MVar
-import Control.Monad (void)
+import Control.Concurrent.STM
+import Control.Monad (void, when)
 import Database.SQLite.Simple
 import Data.Time.Clock (getCurrentTime)
 import Data.Text as T hiding (map, filter, any)
@@ -98,48 +99,91 @@ sendImage conn sessionid = do
     Nothing -> return ()
     Just s -> WS.sendBinaryData conn s
 
-observationServer :: T.Text -> WS.PendingConnection -> IO ()
-observationServer sid pending = do
-  conn <- WS.acceptRequest pending
-  forever $ sendImage conn sid
+-- RL specific stuff here
 
-actionServer :: T.Text -> WS.PendingConnection -> IO ()
-actionServer sid pending = do
+observationServer :: SharedState -> T.Text -> WS.PendingConnection -> IO ()
+observationServer state sid pending = do
+  conn <- WS.acceptRequest pending
+  loop conn
+  where 
+    loop conn = do
+      signal <- waitForSignal state
+      when (signal == "start") $ do
+        sendImage conn sid
+        loop conn
+
+actionServer :: SharedState -> T.Text -> WS.PendingConnection -> IO ()
+actionServer state sid pending = do
+  conn <- WS.acceptRequest pending
+  loop conn
+  where 
+    loop conn = do
+      signal <- waitForSignal state
+      when (signal == "start") $ do
+        action <- WS.receiveData conn
+        case decode action :: Maybe BrowserAction of
+          Just a -> do
+            status <- executeAction sid a
+            WS.sendTextData conn (encode status)
+          Nothing -> WS.sendTextData conn (T.pack "Invalid data format for action")
+        loop conn
+
+controlServer :: SharedState -> T.Text -> WS.PendingConnection -> IO ()
+controlServer state sid pending = do
   conn <- WS.acceptRequest pending
   forever $ do
-    action <- WS.receiveData conn
-    case decode action :: Maybe BrowserAction of
+    msg <- WS.receiveData conn
+    case decode msg :: Maybe ControlMessage of
       Just a -> do
-        print a
-        status <- executeAction sid a
-        print status
-        WS.sendTextData conn (encode status)
-      Nothing -> WS.sendTextData conn (T.pack "Invalid data format")
+        case command a of
+          "init" -> do
+            resetTask sid
+            defineTask state (envName a)
+          "reset" -> resetTask sid
+          "start" -> notifyServers state "running"
+          "stop" -> notifyServers state "idle"
+          _ -> putStrLn "Invalid Control Message"
+      Nothing -> WS.sendTextData conn (T.pack "Invalid data format for Control Server")
+            
+initializeSharedState :: IO SharedState
+initializeSharedState = do
+  sig <- newTVarIO "idle"
+  tsk <- newTVarIO Nothing
+  return $ SharedState sig tsk
 
-receiveTask :: MVar (Maybe RLTask) -> WS.PendingConnection -> IO ()
-receiveTask resultVar pending = do
-  print "Waiting to receive task"
-  conn <- WS.acceptRequest pending
-  task <- WS.receiveData conn
-  case decode task :: Maybe RLTask of
-    Just t -> do
-      WS.sendTextData conn (T.pack "Task acknowledged")
-      putMVar resultVar (Just t)
-    Nothing -> do
-      WS.sendTextData conn (T.pack "Invalid data format")
-      putMVar resultVar Nothing
+notifyServers :: SharedState -> Signal -> IO ()
+notifyServers state sig = atomically $ writeTVar (signal state) sig
 
-runTaskServer :: IO (Maybe RLTask)
-runTaskServer = do
-  resultVar <- newEmptyMVar
-  void $ forkIO $ WS.runServer "localhost" 8764 (receiveTask resultVar)
-  takeMVar resultVar
+waitForSignal :: SharedState -> IO Signal
+waitForSignal state = atomically $ do
+  sig <- readTVar (signal state)
+  if sig == "idle"
+    then retry -- Block until signal changes
+  else return sig
 
-data RLTask = RLTask 
-  { envName :: String
+defineTask :: SharedState -> Maybe String -> IO ()
+defineTask state tsk = atomically $ do
+  writeTVar (task state) tsk
+
+resetTask :: T.Text -> IO ()
+resetTask sid = do
+  -- This is hardcoded for now since we only have one task
+  let site = (T.pack "https://en.wikipedia.org/wiki/Special:Random")
+  goToURL sid site
+
+-- TODO: data Signal = Running | Idle deriving (Show, Eq)
+type Signal = String -- Possible values: "running", "idle"
+data SharedState = SharedState
+  { signal :: TVar Signal
+  , task   :: TVar (Maybe String)
+  }
+
+data ControlMessage = ControlMessage
+  { command :: String
+  , envName :: Maybe String
   } deriving (Show, Generic)
 
-instance FromJSON RLTask
+instance FromJSON ControlMessage
 
 rl :: Bool
 rl = True
@@ -154,24 +198,18 @@ main = do
       _ <- forkIO scheduler
       runServer 8080
     True -> do
+      state <- initializeSharedState
       seshId <- createSession
       case seshId of
         Nothing -> error "Unable to create browser session in RL mode"
         Just sid -> do
           resizeViewport sid 1080 1920
-          task <- runTaskServer
-          case task of 
-            Nothing -> error "Unable to receive task"
-            Just t -> do
-              case (envName t) of 
-                "wikipedia" -> do
-                  let site = (T.pack "https://en.wikipedia.org/wiki/Special:Random")
-                  goToURL sid site
-                  putStrLn "Starting servers..."
-                  concurrently
-                    (WS.runServer "localhost" 8765 (observationServer sid))
-                    (WS.runServer "localhost" 8766 (actionServer sid))
-                  return ()
-                _ -> do
-                  print "No task received from client, Quitting..."
-                  return () 
+          putStrLn "Starting servers..."
+          done <- newMVar 3
+          _ <- forkIO (WS.runServer "localhost" 8764 (controlServer state sid) >> putMVar done 1)
+          _ <- forkIO (WS.runServer "localhost" 8765 (observationServer state sid) >> putMVar done 1)
+          _ <- forkIO (WS.runServer "localhost" 8766 (actionServer state sid) >> putMVar done 1)
+          takeMVar done
+          takeMVar done
+          takeMVar done
+          return ()
