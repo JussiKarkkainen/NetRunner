@@ -1,4 +1,5 @@
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module Main where
 
@@ -12,6 +13,7 @@ import Control.Concurrent.Async (concurrently)
 import Control.Concurrent.MVar
 import Control.Concurrent.STM
 import Control.Monad (void, when)
+import Control.Exception (catch, SomeException)
 import Database.SQLite.Simple
 import Data.Time.Clock (getCurrentTime)
 import Data.Text as T hiding (map, filter, any)
@@ -108,7 +110,7 @@ observationServer state sid pending = do
   where 
     loop conn = do
       signal <- waitForSignal state
-      when (signal == "start") $ do
+      when (signal == "running") $ do
         sendImage conn sid
         loop conn
 
@@ -119,7 +121,7 @@ actionServer state sid pending = do
   where 
     loop conn = do
       signal <- waitForSignal state
-      when (signal == "start") $ do
+      when (signal == "running") $ do
         action <- WS.receiveData conn
         case decode action :: Maybe BrowserAction of
           Just a -> do
@@ -139,9 +141,16 @@ controlServer state sid pending = do
           "init" -> do
             resetTask sid
             defineTask state (envName a)
-          "reset" -> resetTask sid
-          "start" -> notifyServers state "running"
-          "stop" -> notifyServers state "idle"
+            WS.sendTextData conn (T.pack "Task received")
+          "reset" -> do
+            resetTask sid
+            WS.sendTextData conn (T.pack "Reset received")
+          "start" -> do
+            notifyServers state "running"
+            WS.sendTextData conn (T.pack "Start received")
+          "stop" -> do
+            notifyServers state "idle"
+            WS.sendTextData conn (T.pack "Stop received")
           _ -> putStrLn "Invalid Control Message"
       Nothing -> WS.sendTextData conn (T.pack "Invalid data format for Control Server")
             
@@ -170,6 +179,11 @@ resetTask sid = do
   -- This is hardcoded for now since we only have one task
   let site = (T.pack "https://en.wikipedia.org/wiki/Special:Random")
   goToURL sid site
+
+safeRunServer :: String -> Int -> WS.ServerApp -> IO ()
+safeRunServer host port app =
+  WS.runServer host port app `catch` \(e :: SomeException) -> do
+  putStrLn $ "Server on " ++ host ++ ":" ++ show port ++ " failed: " ++ show e
 
 -- TODO: data Signal = Running | Idle deriving (Show, Eq)
 type Signal = String -- Possible values: "running", "idle"
@@ -206,9 +220,9 @@ main = do
           resizeViewport sid 1080 1920
           putStrLn "Starting servers..."
           done <- newMVar 3
-          _ <- forkIO (WS.runServer "localhost" 8764 (controlServer state sid) >> putMVar done 1)
-          _ <- forkIO (WS.runServer "localhost" 8765 (observationServer state sid) >> putMVar done 1)
-          _ <- forkIO (WS.runServer "localhost" 8766 (actionServer state sid) >> putMVar done 1)
+          _ <- forkIO (safeRunServer "localhost" 8764 (controlServer state sid) >> putMVar done 1)
+          _ <- forkIO (safeRunServer "localhost" 8765 (observationServer state sid) >> putMVar done 1)
+          _ <- forkIO (safeRunServer "localhost" 8766 (actionServer state sid) >> putMVar done 1)
           takeMVar done
           takeMVar done
           takeMVar done

@@ -122,7 +122,6 @@ class StreamingEnv:
           while self.running:
             image_data = await websocket.recv()
             image = Image.open(io.BytesIO(image_data)).convert("RGB")
-            print(np.array(image).shape)
             image = image.resize(self.obs_shape, Image.LANCZOS)
             img_array = np.array(image)
 
@@ -164,13 +163,13 @@ class StreamingEnv:
 
   def start(self):
     self.running = True
-    self._send_command("start")
+    asyncio.run(self._send_command("start"))
     self.listener_thread = threading.Thread(target=self._background_listener, daemon=True)
     self.listener_thread.start()
 
   def stop(self):
     self.running = False
-    self._send_command("stop")
+    asyncio.run(self._send_command("stop"))
     if self.listener_thread.is_alive():
         self.listener_thread.join()
 

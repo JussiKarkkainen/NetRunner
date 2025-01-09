@@ -117,15 +117,19 @@ class HumanInterface:
       mouse=Tensor([mouse_x, mouse_y])
     )
     
-    action, done = self.env.step(network_output)
+    reward, done = self.env.step(network_output)
+    print(f"Reward: {reward}, Done: {done}")
 
   def run(self):
     self.root.mainloop()
     self.running = False
 
 def main():
+  print("initializing environment")
   env = StreamingEnv("wikipedia")
+  print("Starting environment")
   env.start()
+  print("Done")
   
   try:
     interface = HumanInterface(env)
