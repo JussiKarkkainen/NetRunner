@@ -1,4 +1,4 @@
-# Revision history for Explorer
+# Revision history for NetRunner
 
 ## 0.1.0.0 -- YYYY-mm-dd
 

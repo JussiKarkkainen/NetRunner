@@ -6,6 +6,7 @@ module Main where
 import GHC.Generics
 import qualified Network.WebSockets as WS
 import System.Process (createProcess, proc)
+import System.Environment (getArgs)
 import System.Directory (getCurrentDirectory)
 import System.FilePath ((</>))
 import Control.Concurrent
@@ -199,11 +200,10 @@ data ControlMessage = ControlMessage
 
 instance FromJSON ControlMessage
 
-rl :: Bool
-rl = True
-
 main :: IO ()
 main = do 
+  args <- getArgs
+  let rl = "rl" `Prelude.elem` args
   case rl of 
     False -> do
       conn <- open "tasks.db"
