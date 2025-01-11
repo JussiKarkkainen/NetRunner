@@ -1,14 +1,12 @@
 ## NetRunner
-
-NetRunner is a project for allowing various AI agents to use a web browser to complete tasks.
-It is split into two seperate parts, one is a web application to use LLMs to complete 
-tasks with the help of web search tools and the second is a Reinforcement Learning
-environment to train RL agents to use the web browser in a human like way.
+NetRunner is a project designed to enable AI agents to interact with web browsers to accomplish tasks. 
+It consists of two main components: a web application that allows large language models (LLMs) to 
+search the internet, and a reinforcement learning (RL) environment for training RL agents 
+to operate within a web browser.
 
 ## Usage
 Make sure to have [cabal](https://www.haskell.org/cabal/) installed to run the project.
-You also need [geckodriver](https://github.com/mozilla/geckodriver/releases) and [Firefox](https://www.mozilla.org/en-US/firefox/new/) 
-installed.
+You also need [geckodriver](https://github.com/mozilla/geckodriver/releases) and [Firefox](https://www.mozilla.org/en-US/firefox/new/).
 
 ```
 git clone git@github.com:JussiKarkkainen/NetRunner.git
@@ -35,6 +33,7 @@ api.
 
 ## RL Details
 <img src="/docs/rlvideo_new.gif" alt="RL Env" width="300">
+***(Run ```python3 ai_server/rl_human.py``` to play the environment after starting the servers)***
 
 The actual RL environment is implemented in [ai_server/rl_server.py](/ai_server/rl_server.py). It closely follows
 the regular [Gym](https://gymnasium.farama.org/index.html) api, but has a few small differences. Fistly, the observations
