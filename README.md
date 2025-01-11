@@ -25,7 +25,7 @@ cabal run NetRunner -- rl
 
 
 ## LLM details
-<img src="/docs/llmtools.gif" alt="LLM example" width="300">
+<img src="/docs/llmtools_new.gif" alt="LLM example" width="400">
 
 
 
@@ -36,5 +36,5 @@ cabal run NetRunner -- rl
 
 
 ## RL Details
-<img src="/docs/rlvideo.gif" alt="RL Env" width="300">
+<img src="/docs/rlvideo_new.gif" alt="RL Env" width="300">
 
