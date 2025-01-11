@@ -20,14 +20,12 @@ python3 ai_server/server.py
 cabal run NetRunner
 
 # For RL environment
-python3 ai_server/rl_server.py
 cabal run NetRunner -- rl
 ```
 
 
 ## LLM details
-![llmvideo](/docs/llmtools.gif)
-
+<img src="/docs/llmtools.gif" alt="LLM example" width="300">
 
 
 
@@ -38,6 +36,5 @@ cabal run NetRunner -- rl
 
 
 ## RL Details
-![rlvideo](/docs/rlvideo.gif)
-
+<img src="/docs/rlvideo.gif" alt="RL Env" width="300">
 
