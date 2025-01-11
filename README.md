@@ -33,7 +33,7 @@ api.
 
 ## RL Details
 <img src="/docs/rlvideo_new.gif" alt="RL Env" width="300">
-***(Run ```python3 ai_server/rl_human.py``` to play the environment after starting the servers)***
+(Run ```python3 ai_server/rl_human.py``` to play the environment after starting the servers)
 
 The actual RL environment is implemented in [ai_server/rl_server.py](/ai_server/rl_server.py). It closely follows
 the regular [Gym](https://gymnasium.farama.org/index.html) api, but has a few small differences. Fistly, the observations
