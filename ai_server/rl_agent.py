@@ -1,10 +1,7 @@
 from rl_server import StreamingEnv, NetworkOutput
 from tinygrad import Tensor, nn
 from dataclasses import dataclass
-
-
-from tinygrad.tensor import Tensor
-import tinygrad.nn as nn
+import numpy as np
 
 class BrowserAgent:
   def __init__(self, input_shape, hidden_units=256):
@@ -16,6 +13,8 @@ class BrowserAgent:
     self.action_type_fc = nn.Linear(hidden_units, 3)    
     self.keyboard_key_fc = nn.Linear(hidden_units, 78)   
     self.mouse_fc = nn.Linear(hidden_units, 2)       
+
+    self.mouse_log_std = Tensor(np.zeros((1, 2)))
     
     self.value_fc = nn.Linear(hidden_units, 1)        
 
@@ -27,13 +26,39 @@ class BrowserAgent:
     
     x = self.flatten(x).relu()
     
-    action_type = self.action_type_fc(x).log_softmax() 
-    keyboard_key = self.keyboard_key_fc(x).log_softmax()
-    mouse = self.mouse_fc(x).sigmoid()  
+    action_type_log_prob = self.action_type_fc(x).log_softmax() 
+    action_type = action_type_log_prob.exp().multinomial()
+    keyboard_key_log_prob = self.keyboard_key_fc(x).log_softmax()
+    keyboard_key = keyboard_key_log_prob.exp().multinomial()
+
+    mouse_mean = self.mouse_fc(x).sigmoid()  
+    mouse_std = self.mouse_log_std.exp()
     
+    noise = Tensor(np.random.randn(*mouse_mean.shape))
+    mouse_action = mouse_mean + noise * mouse_std
+
+    mouse_log_prob = -0.5 * (Tensor.log(2 * Tensor(np.pi)) + 2 * self.mouse_log_std + (mouse_action - mouse_mean)**2 / mouse_std**2).sum(dim=-1)
+
     value = self.value_fc(x)
     
-    return action_type, keyboard_key, mouse, value
+    return BrowserActionout(
+        action_type=action_type,
+        action_type_log_prob=action_type_log_prob,
+        keyboard_key=keyboard_key, 
+        keyboard_key_log_prob=keyboard_key_log_prob,
+        mouse_action=mouse_action, 
+        mouse_log_prob=mouse_log_prob, 
+        value=value)
+
+@dataclass 
+class BrowserAgentOut:
+  action_type: Tensor
+  action_type_log_prob: Tensor
+  keyboard_key: Tensor
+  keyboard_key_log_prob: Tensor
+  mouse_action: Tensor
+  mouse_log_prob: Tensor
+  value: Tensor
 
 def calculate_returns_and_advantages(rewards, values, gamma=0.99):
   pass
@@ -46,13 +71,22 @@ def collect_experience(env, agent):
   observations, actions, log_probs, rewards, values, dones = [], [], [], [], [], []
   for step in range(config["steps_per_batch"]):
     observation = Tensor(env.get_observation()).div(255).mul(2).sub(1).permute(0, 3, 1, 2) # Normalize the image
-    action, log_prob, value = agent(obs)
+    model_output = agent(obs)
+    
+    output = NetworkOutput(
+        action_type=model_output.action_type,
+        keyboard=model_output.keyboard
+        mouse=model_output.mouse_action
+    )
 
-    reward, done = env.step()
+    reward, done = env.step(output)
+
+    total_log_prob = model_output.action_type_log_prob + model_output.keyboard_key_log_prob + \
+                     model_output.mouse_log_prob
 
 		observations.append(obs)
     actions.append(action)
-    log_probs.append(log_prob)
+    log_probs.append(total_log_prob)
     rewards.append(reward)
     values.append(value)
     dones.append(done)
@@ -103,6 +137,7 @@ def rl_loop(env):
 config = {
     "num_iterations": 1000,
     "ppo_epochs": 5,
+    "steps_per_batch": 2048,
     "gamma": 0.99
     "epsilon": 0.2,
     "critic_loss_weight": 0.5,

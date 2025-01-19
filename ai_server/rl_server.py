@@ -70,13 +70,13 @@ class BrowserActionSpace:
 
 		
   def network_output_to_action(self, network_output: NetworkOutput) -> BrowserAction:
-    action_type = network_output.action_type.numpy().argmax()
+    action_type_idx = network_output.action_type_idx
     
-    if action_type == ActionType.NO_OP.value:
+    if action_type_idx == ActionType.NO_OP.value:
       return BrowserAction(action_type=ActionType.NO_OP.value)
     
-    elif action_type == ActionType.KEYBOARD.value:
-      key_idx = network_output.keyboard_key.numpy().argmax()
+    elif action_type_idx == ActionType.KEYBOARD.value:
+      key_idx = network_output.keyboard_key
       return BrowserAction(
           action_type=ActionType.KEYBOARD.value,
           keyboard_key=self.keyboard_map[key_idx]
