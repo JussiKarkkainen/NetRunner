@@ -79,7 +79,7 @@ sendPostRequest url body = do
             [ ("Content-Type", "application/json") ]
         }
   response <- httpLbs request manager
-  print response
+  -- print response
   return $ responseBody response
 
 sendGetRequest :: T.Text -> IO BL.ByteString
@@ -122,19 +122,17 @@ executeScript sessionId script = do
           , "args" .= ([] :: [Value]) 
           ]
   response <- sendPostRequest (T.unpack url) requestBody
-  case decode response of
+  case decode response :: Maybe Value of
     Just (Object obj) -> do
       case parseEither (.: "value") obj of
         Left err -> do
           putStrLn $ "(executeScript) Error extracting 'value' from JSON: " ++ err
           return Nothing
-        Right (Number num) -> return $ Just (T.pack (show num))
-        Right _ -> do
-          putStrLn "(executeScript) Unexpected non-number 'value' in JSON."
-          return Nothing
+        Right val -> return $ Just (T.pack val)
     _ -> do
       putStrLn "(executeScript) Failed to decode JSON response."
       return Nothing
+
 
 goToURL :: T.Text -> T.Text -> IO ()
 goToURL sessionId url = do
@@ -164,7 +162,7 @@ sendMouseAction sessionId x y = do
                 ]
               , object
                 [ "type" .= ("pointerUp" :: T.Text)
-                , "button" .= (0 :: Int) -- Left mouse button
+                , "button" .= (0 :: Int) 
                 ]
               ]
             ]

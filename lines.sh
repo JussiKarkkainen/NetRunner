@@ -1,1 +1,1 @@
-git ls-files | xargs wc -l
+git ls-files | grep -v '^docs/' | xargs wc -l

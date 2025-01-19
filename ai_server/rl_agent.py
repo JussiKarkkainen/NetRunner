@@ -2,6 +2,7 @@ from rl_server import StreamingEnv, NetworkOutput
 from tinygrad import Tensor, nn
 from dataclasses import dataclass
 import numpy as np
+import time
 
 @dataclass 
 class BrowserAgentOut:
@@ -83,16 +84,23 @@ def collect_experience(env, agent):
   action_type_log_probs, keyboard_log_probs, mouse_log_probs = [], [], []
   rewards, values, dones = [], [], []
   for step in range(config["steps_per_batch"]):
+    print(f"Step: {step}")
     obs = Tensor(env.get_observation()).unsqueeze(dim=0).div(255).mul(2).sub(1).permute(0, 3, 1, 2) # Normalize the image
+    m_st = time.perf_counter()
     model_output = agent(obs)
+    m_et = time.perf_counter()
+    print(f"Time for model: {(m_et - m_st):.4f}")
     
     action = NetworkOutput(
         action_type=model_output.action_type.item(),
         keyboard_key=model_output.keyboard_key.item(),
-        mouse=model_output.mouse_action.tolist()
+        mouse=model_output.mouse_action.squeeze().tolist()
     )
 
+    e_st = time.perf_counter()
     reward, done = env.step(action)
+    e_et = time.perf_counter()
+    print(f"Time for env step: {(e_et - e_st):.4f}\n")
 
     observations.append(obs)
     actions.append(action)
@@ -125,6 +133,7 @@ def rl_loop(env):
     for iteration in range(config["num_iterations"]):
       obs, actions, log_probs, rewards, values = collect_experience(env, agent)
       returns, advantages = calculate_returns_and_advantages(rewards, values, config["gamma"])
+      raise Exception("returns and advantages")
 
       for _ in range(ppo_epochs):
         indices = sample_minibatches(obs, actions, returns, advantages)

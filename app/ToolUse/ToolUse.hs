@@ -18,7 +18,8 @@ import Data.Maybe (fromMaybe)
 import ToolUse.GeckoDriver 
 import ToolUse.HtmlParser (cleanHtml)
 import Data.Aeson (ToJSON(..), FromJSON(..), (.=), (.:), (.:?), fieldLabelModifier, 
-                   genericToJSON, defaultOptions, genericParseJSON, camelTo2)
+                   genericToJSON, defaultOptions, genericParseJSON, camelTo2, decode,
+                   eitherDecode)
 import GHC.Generics
 import Data.Text as T
 import Control.Concurrent (threadDelay)
@@ -179,14 +180,20 @@ data EnvStatus = EnvStatus
   , scrollPos :: Double
   } deriving (Show, Generic)
 
-getBrowserState :: T.Text -> IO (EnvStatus)
+getBrowserState :: T.Text -> IO EnvStatus
 getBrowserState sessionid = do
-  maybeCurrentUrl <- getCurrentURL sessionid
-  maybeScrollY <- executeScript sessionid "return window.scrollY;"
-  let currentUrl = fromMaybe (error "Failed to fetch current URL") maybeCurrentUrl
-      scrollYText = fromMaybe (error "Failed to fetch scrollY") maybeScrollY
-  let y = read (T.unpack scrollYText) :: Double
-  return $ EnvStatus currentUrl y
+  maybeState <- executeScript sessionid $
+    "return JSON.stringify({ currentUrl: window.location.href, scrollY: window.scrollY });"
+  let stateText = fromMaybe (error "Failed to fetch browser state") maybeState
+  case eitherDecode (BL.fromStrict $ TE.encodeUtf8 stateText) of
+    Right envStatus -> return envStatus
+    Left err        -> error $ "Failed to parse browser state: " ++ err
+
+instance FromJSON EnvStatus where
+  parseJSON = withObject "EnvStatus" $ \o -> do
+    url <- o .: "currentUrl"
+    scrollY <- o .: "scrollY"
+    return $ EnvStatus url scrollY
 
 calculateReward :: EnvStatus -> EnvStatus -> RLStatus
 calculateReward b a = 
