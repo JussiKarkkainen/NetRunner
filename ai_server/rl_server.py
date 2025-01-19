@@ -20,9 +20,9 @@ class ActionType(Enum):
 
 @dataclass
 class NetworkOutput:
-  action_type: Tensor   # shape: (3,) softmax probabilities
-  keyboard_key: Tensor  # shape (78,) softmax probabilities 
-  mouse: Tensor         # shape (2,) sigmoid coordinates in [0, 1]
+  action_type: int  
+  keyboard_key: int
+  mouse: list
 
 @dataclass
 class BrowserAction:
@@ -70,7 +70,7 @@ class BrowserActionSpace:
 
 		
   def network_output_to_action(self, network_output: NetworkOutput) -> BrowserAction:
-    action_type_idx = network_output.action_type_idx
+    action_type_idx = network_output.action_type
     
     if action_type_idx == ActionType.NO_OP.value:
       return BrowserAction(action_type=ActionType.NO_OP.value)
@@ -82,8 +82,8 @@ class BrowserActionSpace:
           keyboard_key=self.keyboard_map[key_idx]
       )
     
-    elif action_type == ActionType.MOUSE.value:
-      mouse_coords = network_output.mouse.numpy()
+    elif action_type_idx == ActionType.MOUSE.value:
+      mouse_coords = network_output.mouse
       return BrowserAction(
           action_type=ActionType.MOUSE.value,
           mouse_x=int(mouse_coords[0] * self.screen_width),
