@@ -3,106 +3,112 @@ from tinygrad import Tensor, nn
 from dataclasses import dataclass
 
 
-def conv3x3(x, weight, bias):
-	return x.conv2d(weight, bias, stride=1, padding=1)
+from tinygrad.tensor import Tensor
+import tinygrad.nn as nn
 
-def group_norm(x, weight, bias, num_groups=32):
-	x = x.reshape(x.shape[0], num_groups, -1).layernorm(eps=1e-5).reshape(x.shape)
-	return x * weight.reshape(1, -1, *[1] * (len(x.shape)-2)) + bias.reshape(1, -1, *[1] * (len(x.shape)-2))
+class BrowserAgent:
+  def __init__(self, input_shape, hidden_units=256):
+    self.conv1 = nn.Conv2d(3, 16, 3, stride=2, padding=1)  # Input: (3, 170, 340) -> (16, 85, 170)
+    self.conv2 = nn.Conv2d(16, 32, 3, stride=2, padding=1) # (16, 85, 170) -> (32, 43, 85)
+    self.conv3 = nn.Conv2d(32, 64, 3, stride=2, padding=1) # (32, 43, 85) -> (64, 22, 43)
+    self.flatten = nn.Linear(64 * 22 * 43, hidden_units) 
+    
+    self.action_type_fc = nn.Linear(hidden_units, 3)    
+    self.keyboard_key_fc = nn.Linear(hidden_units, 78)   
+    self.mouse_fc = nn.Linear(hidden_units, 2)       
+    
+    self.value_fc = nn.Linear(hidden_units, 1)        
 
-def res_block(x, in_channels, out_channels, norm_weight, norm_bias, conv_weight, 
-              conv_bias, skip_weight=None, skip_bias=None):
-	num_groups = max(1, in_channels // 32) # TODO: Remove magic values
-	x_norm = group_norm(x, norm_weight, norm_bias, num_groups).silu()
-	x_conv = conv3x3(x_norm, conv_weight, conv_bias)
-	x_skip = x if in_channels == out_channels else x.conv2d(skip_weight, skip_bias)
-	return x_skip + x_conv
+  def __call__(self, obs: Tensor) -> Tuple[Tensor, Tensor, Tensor, Tensor]:
+    x = self.conv1(obs).relu()
+    x = self.conv2(x).relu()
+    x = self.conv3(x).relu()
+    x = x.reshape(x.shape[0], -1) 
+    
+    x = self.flatten(x).relu()
+    
+    action_type = self.action_type_fc(x).log_softmax() 
+    keyboard_key = self.keyboard_key_fc(x).log_softmax()
+    mouse = self.mouse_fc(x).sigmoid()  
+    
+    value = self.value_fc(x)
+    
+    return action_type, keyboard_key, mouse, value
 
-def lstm(x, hc, weight_ih, weight_hh, bias_ih, bias_hh):
-	gates = (x.matmul(weight_ih.T) + bias_ih) + (hc[0].matmul(weight_hh.T) + bias_hh)
-	i, f, g, o = gates.chunk(4, dim=1)
-	i, f, g, o = i.sigmoid(), f.sigmoid(), g.tanh(), o.sigmoid()
-	new_c = f * hc[1] + i * g
-	new_h = o * new_c.tanh()
-	return (new_h.contiguous(), new_c.contiguous())
-
-def init_lstm():
-	return [Tensor.zeros(1, 512), Tensor.zeros(1, 512)]
-
-def actor_critic_head(x, critic_w, actor_w, critic_b, actor_b):
-	return x.matmul(actor_w.T) + actor_b, x.matmul(critic_w.T) + critic_b
-
-def actor_critic_encoder(x, conv_weights, conv_biases, norm_weights, norm_biases, 
-                         skip_weight, skip_bias):
-	x = conv3x3(x, conv_weights[0], conv_biases[0])
-	channels = [32, 32, 64, 64]
-	for i in range(len(channels)):
-		in_channels = channels[max(0, i - 1)]
-		out_channels = channels[i]
-		x = res_block(x, in_channels, out_channels, norm_weights[i], norm_biases[i],
-									conv_weights[i+1], conv_biases[i+1], skip_weight, skip_bias)
-		x = x.max_pool2d()
-	return x
-
-def actor_critic(x, hc, params: ActorCriticParameters):
-  x = actor_critic_encoder(x, params.conv_weights, params.conv_biases, 
-                           params.norm_weights, params.norm_biases,
-                           params.skip_weight, params.skip_bias)
-  x = x.flatten(start_dim=1)
-  h, c = lstm(x, hc, *params.lstm_weights, *params.lstm_biases)
-  action_logits, value = actor_critic_head(h, *params.head_weights, 
-                                           *params.head_biases)
-  return action_logits.softmax(axis=1).multinomial(), value, (h, c)
-
-@dataclass 
-class ActorCriticParameters:
-	conv_weights = [v for k, v in state_dict.items() if k.startswith("actor_critic.encoder") \
-									and not "norm" in k and not "skip_projection" in k and "weight" in k]
-	conv_biases = [v for k, v in state_dict.items() if k.startswith("actor_critic.encoder") \
-									and not "norm" in k and not "skip_projection" in k and "bias" in k]
-	norm_weights = [v for k, v in state_dict.items() if k.startswith("actor_critic.encoder") \
-									and "norm" in k and "weight" in k]
-	norm_biases = [v for k, v in state_dict.items() if k.startswith("actor_critic.encoder") \
-									and "norm" in k and "bias" in k]
-	skip_weight = state_dict["actor_critic.encoder.encoder.5.skip_projection.weight"]
-	skip_bias = state_dict["actor_critic.encoder.encoder.5.skip_projection.bias"]
-	lstm_weights = [state_dict["actor_critic.lstm.weight_ih"], state_dict["actor_critic.lstm.weight_hh"]]
-	lstm_biases = [state_dict["actor_critic.lstm.bias_ih"], state_dict["actor_critic.lstm.bias_hh"]]
-	head_weights = [state_dict["actor_critic.critic_linear.weight"], state_dict["actor_critic.actor_linear.weight"]]
-	head_biases = [state_dict["actor_critic.critic_linear.bias"], state_dict["actor_critic.actor_linear.bias"]]
+def calculate_returns_and_advantages(rewards, values, gamma=0.99):
+  pass
 
 def update_actor_critic(actor_critic_fn, params, optimizer):
   pass
 
+def collect_experience(env, agent):
+  env.reset()
+  observations, actions, log_probs, rewards, values, dones = [], [], [], [], [], []
+  for step in range(config["steps_per_batch"]):
+    observation = Tensor(env.get_observation()).div(255).mul(2).sub(1).permute(0, 3, 1, 2) # Normalize the image
+    action, log_prob, value = agent(obs)
+
+    reward, done = env.step()
+
+		observations.append(obs)
+    actions.append(action)
+    log_probs.append(log_prob)
+    rewards.append(reward)
+    values.append(value)
+    dones.append(done)
+
+    if done:
+      env.reset()
+
+	observations = Tensor(observations)
+  actions = Tensor(actions)
+  log_probs = Tensor(log_probs)
+  rewards = Tensor(rewards)
+  values = Tensor(values)
+  dones = Tensor(dones)
+
+  return observations, actions, log_probs, rewards, values, dones
+
+    
 def rl_loop(env):
-	env.start()
-	print("Environment started. Press Ctrl+C to exit.")
+  env.start()
+  print("Environment started. Press Ctrl+C to exit.")
 
-	try:
-    # .unsqueeze(dim=0).div(255).mul(2).sub(1).permute(0, 3, 1, 2)
-		observation = Tensor(env.get_observation())
+  agent = BrowserAgent()
+  try:
+    for iteration in range(config["num_iterations"]):
+      obs, actions, log_probs, rewards, values = collect_experience(env, agent)
+      returns advantages = calculate_returns_and_advantages(rewards, values, config["gamma"])
 
-		for epoch in range(config["num_epochs"]):
-			network_output = simulate_network_output()
-			
-			print("Network output:")
-			print(f"Action type probs: {network_output.action_type.tolist()}")
-			print(f"Selected action: {network_output.action_type.numpy().argmax()}")
-			
-			env.step(network_output)
-			print("Action taken")
-			raise Exception
-			
-			observation = env.get_observation()
-			time.sleep(10)
+      for _ in range(ppo_epochs):
+        indices = sample_minibatches(obs, actions, returns, advantages)
+        for batch in indices:
+          optimizer.zero_grad()
 
-	except KeyboardInterrupt:
-		print("\nExiting loop. Stopping environment.")
-	finally:
-		env.stop()
+          new_log_probs, value_preds = agent(batch["obs"])
+          ratios = (new_log_probs - batch["log_probs"]).exp()
+          clipped_ratios = ratios.clamp(1 - config["epsilon"], 1 + config["epsilon"])
 
-config = {"num_epochs": 1000}
+          policy_loss = -Tensor.min(ratios * batch["advantages"], clipped_ratios * batch["advantages"]).mean()
+          value_loss = (value_preds - batch["returns"]).pow(2).mean()
+
+          loss = policy_loss + config["critic_loss_weight"] * value_loss - config["entropy_weight"] * entropy(new_log_probs)
+          optimizer.step(loss)
+
+  except KeyboardInterrupt:
+    print("\nExiting loop. Stopping environment.")
+  finally:
+    env.stop()
+
+config = {
+    "num_iterations": 1000,
+    "ppo_epochs": 5,
+    "gamma": 0.99
+    "epsilon": 0.2,
+    "critic_loss_weight": 0.5,
+    "entropy_weight": 0.01}
+
 
 if __name__ == "__main__":
-  env = StreamingEnv()
+  env = StreamingEnv(task="wikipedia")
   rl_loop(env)
