@@ -61,11 +61,21 @@ class BrowserAgent:
         mouse_log_prob=mouse_log_prob, 
         value=value)
 
-def calculate_returns_and_advantages(rewards, values, gamma=0.99):
-  pass
+def calculate_returns_and_advantages(rewards, values, gamma=0.99, normalize=True):
+  returns = Tensor.zeros_like(rewards)
+  returns[-1] = rewards[-1] * gamma * values[-1]
 
-def update_actor_critic(actor_critic_fn, params, optimizer):
-  pass
+  for t in reversed(range(rewards.shape[1] - 1)):
+    returns[:, t] = rewards[:, t] + gamma * returns[t + 1]
+
+  if normalize:
+    returns = (returns - returns.mean()) / (returns.std() + 1e-8)
+
+  advantages = returns - values
+  if normalize:
+    advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
+
+  return returns, advantages
 
 def collect_experience(env, agent):
   env.reset()
@@ -114,7 +124,6 @@ def rl_loop(env):
   try:
     for iteration in range(config["num_iterations"]):
       obs, actions, log_probs, rewards, values = collect_experience(env, agent)
-      raise Exception
       returns, advantages = calculate_returns_and_advantages(rewards, values, config["gamma"])
 
       for _ in range(ppo_epochs):
