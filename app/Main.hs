@@ -115,8 +115,8 @@ observationServer state sid pending = do
         sendImage conn sid
         loop conn
 
-actionServer :: SharedState -> T.Text -> WS.PendingConnection -> IO ()
-actionServer state sid pending = do
+actionServer :: SharedState -> T.Text -> CachedEnvStatus-> WS.PendingConnection -> IO ()
+actionServer state sid cache pending = do
   conn <- WS.acceptRequest pending
   loop conn
   where 
@@ -126,13 +126,13 @@ actionServer state sid pending = do
         action <- WS.receiveData conn
         case decode action :: Maybe BrowserAction of
           Just a -> do
-            status <- executeAction sid a
+            status <- executeAction sid a cache
             WS.sendTextData conn (encode status)
           Nothing -> WS.sendTextData conn (T.pack "Invalid data format for action")
         loop conn
 
-controlServer :: SharedState -> T.Text -> WS.PendingConnection -> IO ()
-controlServer state sid pending = do
+controlServer :: SharedState -> T.Text -> CachedEnvStatus -> WS.PendingConnection -> IO ()
+controlServer state sid cache pending = do
   conn <- WS.acceptRequest pending
   forever $ do
     msg <- WS.receiveData conn
@@ -145,6 +145,7 @@ controlServer state sid pending = do
             WS.sendTextData conn (T.pack "Task received")
           "reset" -> do
             resetTask sid
+            atomically $ writeTVar cache Nothing
             WS.sendTextData conn (T.pack "Reset received")
           "start" -> do
             notifyServers state "running"
@@ -213,6 +214,7 @@ main = do
       runServer 8080
     True -> do
       state <- initializeSharedState
+      cachedStatus <- newTVarIO Nothing  -- Cached state for reward calculation in actionServer
       seshId <- createSession
       case seshId of
         Nothing -> error "Unable to create browser session in RL mode"
@@ -220,9 +222,9 @@ main = do
           resizeViewport sid 1080 1920
           putStrLn "Starting servers..."
           done <- newMVar 3
-          _ <- forkIO (safeRunServer "localhost" 8764 (controlServer state sid) >> putMVar done 1)
+          _ <- forkIO (safeRunServer "localhost" 8764 (controlServer state sid cachedStatus) >> putMVar done 1)
           _ <- forkIO (safeRunServer "localhost" 8765 (observationServer state sid) >> putMVar done 1)
-          _ <- forkIO (safeRunServer "localhost" 8766 (actionServer state sid) >> putMVar done 1)
+          _ <- forkIO (safeRunServer "localhost" 8766 (actionServer state sid cachedStatus) >> putMVar done 1)
           takeMVar done
           takeMVar done
           takeMVar done

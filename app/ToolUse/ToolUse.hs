@@ -8,11 +8,14 @@ module ToolUse.ToolUse
   , ToolOutput(..)
   , BrowserAction(..)
   , RLStatus(..)
+  , EnvStatus(..)
+  , CachedEnvStatus
   ) where
 
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.ByteString.Base64 as Base64
 import qualified Data.Text.Encoding as TE
+import Control.Concurrent.STM
 import Data.Aeson.Types (object, withObject, Parser)
 import Data.Maybe (fromMaybe)
 import ToolUse.GeckoDriver 
@@ -205,14 +208,22 @@ calculateReward b a =
     RLStatus 1 False
   else RLStatus (-1) False
 
-executeAction :: T.Text -> BrowserAction -> IO (RLStatus)
-executeAction sessionid action = do
-  beforeState <- getBrowserState sessionid
+type CachedEnvStatus = TVar (Maybe EnvStatus)
+
+executeAction :: T.Text -> BrowserAction -> CachedEnvStatus -> IO RLStatus
+executeAction sessionid action cache = do
+  beforeState <- atomically $ readTVar cache
+  curBeforeState <- case beforeState of
+    Just state -> return state
+    Nothing    -> getBrowserState sessionid
+
   case actionType action of
     0 -> return ()
     1 -> sendKeyboardAction sessionid (parseSpecial (T.pack (keyboardKey action)))
     2 -> sendMouseAction sessionid (mouseX action) (mouseY action)
     _ -> error "Invalid action types"
+
   afterState <- getBrowserState sessionid
-  return $ calculateReward beforeState afterState
+  atomically $ writeTVar cache (Just afterState)
+  return $ calculateReward curBeforeState afterState
 
