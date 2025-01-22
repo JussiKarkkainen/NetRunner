@@ -54,16 +54,16 @@ class BrowserAgent:
     value = self.value_fc(x)
     
     return BrowserAgentOut(
-        action_type=action_type,
-        action_type_log_prob=action_type_log_prob,
-        keyboard_key=keyboard_key, 
-        keyboard_key_log_prob=keyboard_key_log_prob,
-        mouse_action=mouse_action, 
-        mouse_log_prob=mouse_log_prob, 
-        value=value)
+        action_type=action_type.realize(),
+        action_type_log_prob=action_type_log_prob.realize(),
+        keyboard_key=keyboard_key.realize(), 
+        keyboard_key_log_prob=keyboard_key_log_prob.realize(),
+        mouse_action=mouse_action.realize(), 
+        mouse_log_prob=mouse_log_prob.realize(), 
+        value=value.realize())
 
 def calculate_returns_and_advantages(rewards, values, gamma=0.99, normalize=True):
-  returns = Tensor.zeros_like(rewards)
+  returns = Tensor.zeros_like(rewards).contiguous()
   returns[-1] = rewards[-1] * gamma * values[-1]
 
   for t in reversed(range(rewards.shape[1] - 1)):
@@ -114,16 +114,24 @@ def collect_experience(env, agent):
     if done:
       env.reset()
 
-  observations = Tensor(observations)
-  actions = Tensor(actions)
-  log_probs = Tensor(log_probs)
-  rewards = Tensor(rewards)
-  values = Tensor(values)
-  dones = Tensor(dones)
+  observations = Tensor.cat(*observations)
+  action_type_log_probs = Tensor.stack(action_type_log_probs).squeeze()
+  keyboard_log_probs = Tensor.stack(keyboard_log_probs).squeeze()
+  mouse_log_probs = Tensor.stack(mouse_log_probs)
+  rewards = Tensor(rewards).unsqueeze(dim=1).float()
+  values = Tensor.cat(*values)
+  dones = Tensor(dones).unsqueeze(dim=1)
+  action_types = Tensor.stack([Tensor(action.action_type) for action in actions]).unsqueeze(dim=1)
+  keyboard_keys = Tensor.stack([Tensor(action.keyboard_key) for action in actions]).unsqueeze(dim=1)
+  mouse_actions = Tensor.stack([Tensor(action.mouse) for action in actions])
 
-  return observations, actions, log_probs, rewards, values, dones
+  return (observations, action_type_log_probs, keyboard_log_probs, mouse_log_probs,
+          rewards, values, dones, action_types, keyboard_keys, mouse_actions)
+          
 
-    
+def sample_minibatches(obs, action_types, keybaord_keys, mouse_actions, returns, advantages):
+  pass
+
 def rl_loop(env):
   env.start()
   print("Environment started. Press Ctrl+C to exit.")
@@ -131,12 +139,11 @@ def rl_loop(env):
   agent = BrowserAgent()
   try:
     for iteration in range(config["num_iterations"]):
-      obs, actions, log_probs, rewards, values = collect_experience(env, agent)
+      obs, a_type_log_probs, k_log_probs, m_log_probs, rewards, values, dones, action_types, keyboard_keys, mouse_actions = collect_experience(env, agent)
       returns, advantages = calculate_returns_and_advantages(rewards, values, config["gamma"])
-      raise Exception("returns and advantages")
 
       for _ in range(ppo_epochs):
-        indices = sample_minibatches(obs, actions, returns, advantages)
+        indices = sample_minibatches(obs, action_types, keyboard_keys, mouse_actions, returns, advantages)
         for batch in indices:
           optimizer.zero_grad()
 
@@ -150,8 +157,7 @@ def rl_loop(env):
           loss = policy_loss + config["critic_loss_weight"] * value_loss - config["entropy_weight"] * entropy(new_log_probs)
           optimizer.step(loss)
 
-  except Exception as e:
-    print(f"Error: {e}")
+  except KeyboardInterrupt as e:
     print("\nExiting loop. Stopping environment.")
   finally:
     env.stop()
@@ -159,7 +165,7 @@ def rl_loop(env):
 config = {
     "num_iterations": 1000,
     "ppo_epochs": 5,
-    "steps_per_batch": 2048,
+    "steps_per_batch": 2, # 2048
     "gamma": 0.99,
     "epsilon": 0.2,
     "critic_loss_weight": 0.5,

@@ -22,7 +22,7 @@ class ActionType(Enum):
 class NetworkOutput:
   action_type: int  
   keyboard_key: int
-  mouse: list
+  mouse: list[int]
 
 @dataclass
 class BrowserAction:
